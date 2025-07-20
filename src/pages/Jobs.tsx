@@ -20,7 +20,7 @@ interface Job {
   salary_max: number;
   job_type: string;
   created_at: string;
-  company: {
+  profiles: {
     company_name: string;
     full_name: string;
     bio: string;
@@ -160,8 +160,8 @@ const Jobs = () => {
     const matchesSearch = 
       job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       job.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.company?.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.company?.full_name?.toLowerCase().includes(searchTerm.toLowerCase());
+      job.profiles?.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      job.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesLocation = !locationFilter || 
       job.location.toLowerCase().includes(locationFilter.toLowerCase());
@@ -335,7 +335,7 @@ const Jobs = () => {
                       <CardTitle className="text-xl mb-2">{job.title}</CardTitle>
                       <div className="flex items-center text-gray-600 mb-2">
                         <Building className="h-4 w-4 mr-2" />
-                        <span>{job.company?.company_name || job.company?.full_name}</span>
+                        <span>{job.profiles?.company_name || job.profiles?.full_name}</span>
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">

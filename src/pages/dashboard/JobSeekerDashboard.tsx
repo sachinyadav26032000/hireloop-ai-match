@@ -17,7 +17,7 @@ interface Job {
   salary_min: number;
   salary_max: number;
   job_type: string;
-  company: {
+  profiles: {
     company_name: string;
   };
 }
@@ -355,7 +355,7 @@ const JobSeekerDashboard = () => {
                           <Badge variant="secondary">{job.job_type?.replace('_', ' ') || 'Full-time'}</Badge>
                         </div>
                         <p className="text-sm text-gray-600 mb-2">
-                          {job.company?.company_name || 'Company'}
+                          {job.profiles?.company_name || 'Company'}
                         </p>
                         <div className="flex items-center text-sm text-gray-500 mb-3 space-x-4">
                           <div className="flex items-center">

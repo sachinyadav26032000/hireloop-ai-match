@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 
 interface Profile {
   id: string;
-  user_type: 'job_seeker' | 'company' | 'hr';
+  user_type: string;
   full_name: string | null;
   email: string | null;
   phone: string | null;
@@ -74,7 +74,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (error) {
         console.error('Error fetching profile:', error);
       } else {
-        setProfile(data);
+        setProfile(data as Profile);
+        // Redirect based on user type after profile is loaded
+        if (data?.user_type) {
+          setTimeout(() => {
+            switch (data.user_type) {
+              case 'job_seeker':
+                navigate('/dashboard/jobseeker');
+                break;
+              case 'company':
+                navigate('/dashboard/company');
+                break;
+              case 'hr':
+                navigate('/dashboard/hr');
+                break;
+              default:
+                navigate('/');
+            }
+          }, 0);
+        }
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -91,27 +109,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       });
 
       if (error) throw error;
-
-      // Wait for the profile to be loaded
-      setTimeout(() => {
-        const currentProfile = profile;
-        if (currentProfile) {
-          // Redirect based on user type
-          switch (currentProfile.user_type) {
-            case 'job_seeker':
-              navigate('/dashboard/jobseeker');
-              break;
-            case 'company':
-              navigate('/dashboard/company');
-              break;
-            case 'hr':
-              navigate('/dashboard/hr');
-              break;
-            default:
-              navigate('/');
-          }
-        }
-      }, 1000);
 
       toast.success('Signed in successfully!');
     } catch (error: any) {
