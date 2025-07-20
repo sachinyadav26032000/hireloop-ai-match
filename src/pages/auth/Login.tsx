@@ -21,10 +21,10 @@ const Login = () => {
     setLoading(true);
     try {
       await signIn(email, password);
+      // Don't set loading to false here if successful - redirect will happen
     } catch (error) {
       console.error('Login failed:', error);
-    } finally {
-      setLoading(false);
+      setLoading(false); // Only set loading to false on error
     }
   };
 
