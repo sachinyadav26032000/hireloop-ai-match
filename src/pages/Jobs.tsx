@@ -166,9 +166,9 @@ const Jobs = () => {
     const matchesLocation = !locationFilter || 
       job.location.toLowerCase().includes(locationFilter.toLowerCase());
 
-    const matchesJobType = !jobTypeFilter || job.job_type === jobTypeFilter;
+    const matchesJobType = !jobTypeFilter || jobTypeFilter === 'all' || job.job_type === jobTypeFilter;
 
-    const matchesSalary = !salaryFilter || (() => {
+    const matchesSalary = !salaryFilter || salaryFilter === 'all' || (() => {
       const minSalary = job.salary_min || 0;
       switch (salaryFilter) {
         case '0-50k': return minSalary < 50000;
@@ -272,7 +272,7 @@ const Jobs = () => {
                     <SelectValue placeholder="Job Type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Types</SelectItem>
+                    <SelectItem value="all">All Types</SelectItem>
                     <SelectItem value="full_time">Full Time</SelectItem>
                     <SelectItem value="part_time">Part Time</SelectItem>
                     <SelectItem value="contract">Contract</SelectItem>
@@ -286,7 +286,7 @@ const Jobs = () => {
                     <SelectValue placeholder="Salary" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Any Salary</SelectItem>
+                    <SelectItem value="all">Any Salary</SelectItem>
                     <SelectItem value="0-50k">Under $50k</SelectItem>
                     <SelectItem value="50k-100k">$50k - $100k</SelectItem>
                     <SelectItem value="100k-150k">$100k - $150k</SelectItem>
@@ -318,8 +318,8 @@ const Jobs = () => {
               onClick={() => {
                 setSearchTerm('');
                 setLocationFilter('');
-                setJobTypeFilter('');
-                setSalaryFilter('');
+                setJobTypeFilter('all');
+                setSalaryFilter('all');
               }}
             >
               Clear Filters
