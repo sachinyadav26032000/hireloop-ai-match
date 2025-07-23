@@ -21,9 +21,11 @@ export type Database = {
           created_at: string
           id: string
           job_id: string
+          response_date: string | null
           resume_id: string | null
           status: string
           updated_at: string
+          viewed_at: string | null
         }
         Insert: {
           applicant_id: string
@@ -31,9 +33,11 @@ export type Database = {
           created_at?: string
           id?: string
           job_id: string
+          response_date?: string | null
           resume_id?: string | null
           status?: string
           updated_at?: string
+          viewed_at?: string | null
         }
         Update: {
           applicant_id?: string
@@ -41,9 +45,11 @@ export type Database = {
           created_at?: string
           id?: string
           job_id?: string
+          response_date?: string | null
           resume_id?: string | null
           status?: string
           updated_at?: string
+          viewed_at?: string | null
         }
         Relationships: [
           {
@@ -124,6 +130,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          applications_count: number | null
           avatar_url: string | null
           bio: string | null
           company_name: string | null
@@ -131,13 +138,16 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          is_premium: boolean | null
           location: string | null
           phone: string | null
+          premium_expires_at: string | null
           updated_at: string
           user_type: string
           website: string | null
         }
         Insert: {
+          applications_count?: number | null
           avatar_url?: string | null
           bio?: string | null
           company_name?: string | null
@@ -145,13 +155,16 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id: string
+          is_premium?: boolean | null
           location?: string | null
           phone?: string | null
+          premium_expires_at?: string | null
           updated_at?: string
           user_type: string
           website?: string | null
         }
         Update: {
+          applications_count?: number | null
           avatar_url?: string | null
           bio?: string | null
           company_name?: string | null
@@ -159,8 +172,10 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          is_premium?: boolean | null
           location?: string | null
           phone?: string | null
+          premium_expires_at?: string | null
           updated_at?: string
           user_type?: string
           website?: string | null
