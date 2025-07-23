@@ -77,21 +77,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setProfile(data as Profile);
         // Redirect based on user type after profile is loaded
         if (data?.user_type) {
-          setTimeout(() => {
-            switch (data.user_type) {
-              case 'job_seeker':
-                navigate('/dashboard/jobseeker');
-                break;
-              case 'company':
-                navigate('/dashboard/company');
-                break;
-              case 'hr':
-                navigate('/dashboard/hr');
-                break;
-              default:
-                navigate('/');
-            }
-          }, 0);
+          switch (data.user_type) {
+            case 'job_seeker':
+              navigate('/dashboard/jobseeker');
+              break;
+            case 'company':
+              navigate('/dashboard/company');
+              break;
+            case 'hr':
+              navigate('/dashboard/hr');
+              break;
+            default:
+              navigate('/');
+          }
         }
       }
     } catch (error) {

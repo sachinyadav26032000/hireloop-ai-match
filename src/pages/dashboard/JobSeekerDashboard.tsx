@@ -168,6 +168,48 @@ const JobSeekerDashboard = () => {
     }
   };
 
+  const handleApplyToJob = async (jobId: string) => {
+    if (!user) {
+      toast.error('Please log in to apply for jobs');
+      return;
+    }
+
+    try {
+      // Check if user has already applied to this job
+      const { data: existingApplication, error: checkError } = await supabase
+        .from('job_applications')
+        .select('id')
+        .eq('job_id', jobId)
+        .eq('applicant_id', user.id)
+        .single();
+
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "not found" error
+        throw checkError;
+      }
+
+      if (existingApplication) {
+        toast.error('You have already applied to this job');
+        return;
+      }
+
+      // Submit job application
+      const { error: insertError } = await supabase
+        .from('job_applications')
+        .insert({
+          job_id: jobId,
+          applicant_id: user.id,
+          status: 'pending'
+        });
+
+      if (insertError) throw insertError;
+
+      toast.success('Application submitted successfully!');
+    } catch (error: any) {
+      console.error('Error applying to job:', error);
+      toast.error(error.message || 'Failed to submit application');
+    }
+  };
+
   const filteredJobs = jobs.filter(job =>
     job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     job.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -378,10 +420,17 @@ const JobSeekerDashboard = () => {
                           {job.description}
                         </p>
                         <div className="flex justify-between items-center">
-                          <Button variant="outline" size="sm">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => navigate(`/jobs/${job.id}`)}
+                          >
                             View Details
                           </Button>
-                          <Button size="sm">
+                          <Button 
+                            size="sm"
+                            onClick={() => handleApplyToJob(job.id)}
+                          >
                             Apply Now
                           </Button>
                         </div>
