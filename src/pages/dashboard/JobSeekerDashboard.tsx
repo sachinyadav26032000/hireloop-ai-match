@@ -3,11 +3,35 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Upload, FileText, Briefcase, User, Search, LogOut, MapPin, DollarSign } from 'lucide-react';
+import { 
+  Upload, 
+  FileText, 
+  User, 
+  Mail, 
+  Phone, 
+  MapPin, 
+  Globe, 
+  Briefcase, 
+  DollarSign, 
+  Search,
+  LogOut,
+  Eye,
+  Plus,
+  Home,
+  Clock,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  Crown
+} from 'lucide-react';
 
 interface Job {
   id: string;
@@ -19,6 +43,7 @@ interface Job {
   job_type: string;
   profiles: {
     company_name: string;
+    full_name: string;
   };
 }
 
@@ -33,14 +58,33 @@ interface Resume {
   summary: string;
 }
 
+interface Application {
+  id: string;
+  status: string;
+  created_at: string;
+  viewed_at: string | null;
+  response_date: string | null;
+  cover_letter: string;
+  jobs: {
+    title: string;
+    profiles: {
+      company_name: string;
+      full_name: string;
+    };
+  };
+}
+
 const JobSeekerDashboard = () => {
   const { user, profile, signOut } = useAuth();
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [resumes, setResumes] = useState<Resume[]>([]);
+  const [applications, setApplications] = useState<Application[]>([]);
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [canApply, setCanApply] = useState(true);
+  const [applicationsLeft, setApplicationsLeft] = useState(3);
 
   useEffect(() => {
     if (!user) {
@@ -49,6 +93,8 @@ const JobSeekerDashboard = () => {
     }
     fetchJobs();
     fetchResumes();
+    fetchApplications();
+    checkApplicationLimits();
   }, [user, navigate]);
 
   const fetchJobs = async () => {
@@ -58,7 +104,8 @@ const JobSeekerDashboard = () => {
         .select(`
           *,
           profiles:company_id (
-            company_name
+            company_name,
+            full_name
           )
         `)
         .eq('status', 'active')
@@ -79,13 +126,60 @@ const JobSeekerDashboard = () => {
       const { data, error } = await supabase
         .from('resumes')
         .select('*')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
       setResumes(data || []);
     } catch (error) {
       console.error('Error fetching resumes:', error);
+      toast.error('Failed to load resumes');
     }
+  };
+
+  const fetchApplications = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('job_applications')
+        .select(`
+          *,
+          jobs (
+            title,
+            profiles:company_id (
+              company_name,
+              full_name
+            )
+          )
+        `)
+        .eq('applicant_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setApplications(data || []);
+    } catch (error) {
+      console.error('Error fetching applications:', error);
+      toast.error('Failed to load applications');
+    }
+  };
+
+  const checkApplicationLimits = async () => {
+    if (!user || !profile) return;
+
+    const isPremium = (profile as any).is_premium && 
+      (!(profile as any).premium_expires_at || new Date((profile as any).premium_expires_at) > new Date());
+    
+    if (isPremium) {
+      setCanApply(true);
+      setApplicationsLeft(-1); // Unlimited
+      return;
+    }
+
+    const applicationsCount = (profile as any).applications_count || 0;
+    const remaining = Math.max(0, 3 - applicationsCount);
+    setApplicationsLeft(remaining);
+    setCanApply(remaining > 0);
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -174,26 +268,27 @@ const JobSeekerDashboard = () => {
       return;
     }
 
+    if (!canApply) {
+      toast.error('You have reached your free application limit. Please upgrade to premium to apply for more jobs.');
+      return;
+    }
+
     try {
       // Check if user has already applied to this job
-      const { data: existingApplication, error: checkError } = await supabase
+      const { data: existingApplication } = await supabase
         .from('job_applications')
         .select('id')
         .eq('job_id', jobId)
         .eq('applicant_id', user.id)
         .single();
 
-      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "not found" error
-        throw checkError;
-      }
-
       if (existingApplication) {
         toast.error('You have already applied to this job');
         return;
       }
 
-      // Submit job application
-      const { error: insertError } = await supabase
+      // Create new application
+      const { error } = await supabase
         .from('job_applications')
         .insert({
           job_id: jobId,
@@ -201,13 +296,30 @@ const JobSeekerDashboard = () => {
           status: 'pending'
         });
 
-      if (insertError) throw insertError;
+      if (error) throw error;
 
       toast.success('Application submitted successfully!');
+      
+      // Refresh data to update counts
+      fetchApplications();
+      checkApplicationLimits();
     } catch (error: any) {
       console.error('Error applying to job:', error);
       toast.error(error.message || 'Failed to submit application');
     }
+  };
+
+  const getStatusBadge = (status: string, viewedAt: string | null, responseDate: string | null) => {
+    if (status === 'accepted') {
+      return <Badge className="bg-green-100 text-green-800"><CheckCircle className="h-3 w-3 mr-1" />Accepted</Badge>;
+    }
+    if (status === 'rejected') {
+      return <Badge className="bg-red-100 text-red-800"><XCircle className="h-3 w-3 mr-1" />Rejected</Badge>;
+    }
+    if (viewedAt) {
+      return <Badge className="bg-blue-100 text-blue-800"><Eye className="h-3 w-3 mr-1" />Reviewed</Badge>;
+    }
+    return <Badge className="bg-gray-100 text-gray-800"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
   };
 
   const filteredJobs = jobs.filter(job =>
@@ -223,10 +335,20 @@ const JobSeekerDashboard = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
+              <Button variant="ghost" onClick={() => navigate('/')} className="mr-4">
+                <Home className="h-4 w-4 mr-2" />
+                Home
+              </Button>
               <h1 className="text-2xl font-bold text-gray-900">Hireloop</h1>
               <span className="ml-4 text-sm text-gray-600">Job Seeker Dashboard</span>
             </div>
             <div className="flex items-center space-x-4">
+              {!canApply && applicationsLeft === 0 && (
+                <Badge className="bg-orange-100 text-orange-800">
+                  <Crown className="h-3 w-3 mr-1" />
+                  Upgrade to Premium
+                </Badge>
+              )}
               <span className="text-sm text-gray-700">
                 Welcome, {profile?.full_name || 'Job Seeker'}
               </span>
@@ -240,22 +362,96 @@ const JobSeekerDashboard = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Application Limits Alert */}
+        {!canApply && (
+          <Alert className="mb-6 border-orange-200 bg-orange-50">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <div className="flex justify-between items-center">
+                <span>
+                  You've reached your free application limit (3 applications). 
+                  Upgrade to premium for unlimited applications.
+                </span>
+                <Button size="sm" className="ml-4">
+                  <Crown className="h-4 w-4 mr-2" />
+                  Upgrade Now
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Sidebar - Profile & Resume */}
           <div className="space-y-6">
-            {/* Profile Card */}
+            {/* Profile Summary */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <User className="h-5 w-5 mr-2" />
-                  Profile
+                <CardTitle className="flex items-center justify-between">
+                  <span className="flex items-center">
+                    <User className="h-5 w-5 mr-2" />
+                    Profile
+                  </span>
+                  {applicationsLeft > 0 ? (
+                    <Badge className="bg-green-100 text-green-800">
+                      {applicationsLeft} Apps Left
+                    </Badge>
+                  ) : (profile as any)?.is_premium ? (
+                    <Badge className="bg-purple-100 text-purple-800">
+                      <Crown className="h-3 w-3 mr-1" />
+                      Premium
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-red-100 text-red-800">
+                      0 Apps Left
+                    </Badge>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  <p><strong>Name:</strong> {profile?.full_name}</p>
-                  <p><strong>Email:</strong> {profile?.email}</p>
-                  <p><strong>Location:</strong> {profile?.location || 'Not specified'}</p>
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <User className="h-10 w-10 text-white" />
+                    </div>
+                    <h3 className="font-semibold text-lg">{profile?.full_name || 'Your Name'}</h3>
+                    <p className="text-sm text-gray-600">{profile?.email}</p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {profile?.phone && (
+                      <div className="flex items-center text-sm">
+                        <Phone className="h-4 w-4 mr-2 text-gray-400" />
+                        {profile.phone}
+                      </div>
+                    )}
+                    {profile?.location && (
+                      <div className="flex items-center text-sm">
+                        <MapPin className="h-4 w-4 mr-2 text-gray-400" />
+                        {profile.location}
+                      </div>
+                    )}
+                    {profile?.website && (
+                      <div className="flex items-center text-sm">
+                        <Globe className="h-4 w-4 mr-2 text-gray-400" />
+                        <a href={profile.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                          {profile.website}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
+                  {profile?.bio && (
+                    <div>
+                      <h4 className="font-medium text-sm mb-2">About</h4>
+                      <p className="text-sm text-gray-600">{profile.bio}</p>
+                    </div>
+                  )}
+
+                  <Button variant="outline" className="w-full">
+                    <User className="h-4 w-4 mr-2" />
+                    Update Profile
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -353,9 +549,49 @@ const JobSeekerDashboard = () => {
                 )}
               </CardContent>
             </Card>
+
+            {/* Application Tracking */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Briefcase className="h-5 w-5 mr-2" />
+                  My Applications ({applications.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {applications.length === 0 ? (
+                  <div className="text-center py-6">
+                    <Briefcase className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                    <p className="text-sm text-gray-600">No applications yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {applications.map((application) => (
+                      <div key={application.id} className="border rounded-lg p-3">
+                        <div className="flex justify-between items-start mb-2">
+                          <h4 className="font-medium text-sm">{application.jobs.title}</h4>
+                          {getStatusBadge(application.status, application.viewed_at, application.response_date)}
+                        </div>
+                        <p className="text-xs text-gray-600 mb-1">
+                          {application.jobs.profiles?.company_name || application.jobs.profiles?.full_name}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Applied: {new Date(application.created_at).toLocaleDateString()}
+                        </p>
+                        {application.viewed_at && (
+                          <p className="text-xs text-blue-600">
+                            Viewed: {new Date(application.viewed_at).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Main Content - Jobs */}
+          {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Search Jobs */}
             <Card>
@@ -397,7 +633,7 @@ const JobSeekerDashboard = () => {
                           <Badge variant="secondary">{job.job_type?.replace('_', ' ') || 'Full-time'}</Badge>
                         </div>
                         <p className="text-sm text-gray-600 mb-2">
-                          {job.profiles?.company_name || 'Company'}
+                          {job.profiles?.company_name || job.profiles?.full_name || 'Company'}
                         </p>
                         <div className="flex items-center text-sm text-gray-500 mb-3 space-x-4">
                           <div className="flex items-center">
@@ -428,10 +664,12 @@ const JobSeekerDashboard = () => {
                             View Details
                           </Button>
                           <Button 
-                            size="sm"
+                            size="sm" 
                             onClick={() => handleApplyToJob(job.id)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                            disabled={!canApply}
                           >
-                            Apply Now
+                            {!canApply ? 'Upgrade to Apply' : 'Apply Now'}
                           </Button>
                         </div>
                       </div>

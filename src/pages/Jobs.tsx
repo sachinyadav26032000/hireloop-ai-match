@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Search, MapPin, DollarSign, Briefcase, Building, ArrowLeft, Heart } from 'lucide-react';
+import { Search, MapPin, DollarSign, Briefcase, Building, ArrowLeft, Heart, Home } from 'lucide-react';
 
 interface Job {
   id: string;
