@@ -19,12 +19,14 @@ const Login = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    
     try {
       await signIn(email, password);
-      // Don't set loading to false here if successful - redirect will happen
+      // Don't manually redirect - let ProtectedRoute handle it
     } catch (error) {
       console.error('Login failed:', error);
-      setLoading(false); // Only set loading to false on error
+    } finally {
+      setLoading(false);
     }
   };
 

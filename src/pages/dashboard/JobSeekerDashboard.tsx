@@ -87,15 +87,23 @@ const JobSeekerDashboard = () => {
   const [applicationsLeft, setApplicationsLeft] = useState(3);
 
   useEffect(() => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-    fetchJobs();
-    fetchResumes();
-    fetchApplications();
-    checkApplicationLimits();
-  }, [user, navigate]);
+    const initializeDashboard = async () => {
+      if (!user) return;
+      
+      try {
+        // Load data sequentially to avoid conflicts
+        await fetchResumes();
+        await fetchApplications(); 
+        await fetchJobs();
+        await checkApplicationLimits();
+      } catch (error) {
+        console.error('Dashboard initialization error:', error);
+        toast.error('Failed to load dashboard data');
+      }
+    };
+
+    initializeDashboard();
+  }, [user]);
 
   const fetchJobs = async () => {
     try {
