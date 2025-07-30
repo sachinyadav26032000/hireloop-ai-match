@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { getSupabaseClient } from '@/integrations/supabase/client';
 import { User } from '@supabase/supabase-js';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -37,6 +37,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    const supabase = getSupabaseClient();
+    
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -49,10 +51,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         setUser(session?.user ?? null);
         if (session?.user) {
-          await fetchProfile(session.user.id);
+          // Use setTimeout to avoid blocking the auth state change
+          setTimeout(() => {
+            fetchProfile(session.user.id);
+          }, 0);
         } else {
           setProfile(null);
           setLoading(false);
@@ -65,6 +70,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const fetchProfile = async (userId: string) => {
     try {
+      const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -87,6 +93,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signIn = async (email: string, password: string) => {
     try {
+      const supabase = getSupabaseClient();
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -104,6 +111,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signUp = async (email: string, password: string, fullName: string, userType: string) => {
     try {
+      const supabase = getSupabaseClient();
       const { error } = await supabase.auth.signUp({
         email,
         password,
@@ -128,6 +136,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signOut = async () => {
     try {
+      const supabase = getSupabaseClient();
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       
@@ -143,6 +152,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const resetPassword = async (email: string) => {
     try {
+      const supabase = getSupabaseClient();
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
@@ -158,6 +168,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const updatePassword = async (password: string) => {
     try {
+      const supabase = getSupabaseClient();
       const { error } = await supabase.auth.updateUser({
         password,
       });

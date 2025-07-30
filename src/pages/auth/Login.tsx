@@ -20,12 +20,23 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
     
+    // Add timeout protection to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        setLoading(false);
+        console.warn('Login timeout - resetting loading state');
+      }
+    }, 10000); // 10 second timeout
+    
     try {
       await signIn(email, password);
+      clearTimeout(timeoutId);
       // Don't manually redirect - let ProtectedRoute handle it
     } catch (error) {
+      clearTimeout(timeoutId);
       console.error('Login failed:', error);
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
