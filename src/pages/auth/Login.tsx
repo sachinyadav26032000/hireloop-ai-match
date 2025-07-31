@@ -20,23 +20,25 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
     
-    // Add timeout protection to prevent infinite loading
-    const timeoutId = setTimeout(() => {
-      if (loading) {
-        setLoading(false);
-        console.warn('Login timeout - resetting loading state');
-      }
-    }, 10000); // 10 second timeout
-    
     try {
-      await signIn(email, password);
-      clearTimeout(timeoutId);
-      // Don't manually redirect - let ProtectedRoute handle it
-    } catch (error) {
-      clearTimeout(timeoutId);
+      // Create a timeout promise
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Login timeout')), 8000)
+      );
+      
+      // Race the sign-in against the timeout
+      await Promise.race([
+        signIn(email, password),
+        timeoutPromise
+      ]);
+      
+    } catch (error: any) {
       console.error('Login failed:', error);
+      if (error.message === 'Login timeout') {
+        // Force page refresh to clear any stuck state
+        window.location.reload();
+      }
     } finally {
-      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
