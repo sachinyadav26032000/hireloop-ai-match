@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,7 +14,27 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
-  const { signIn, resetPassword } = useAuth();
+  const { signIn, resetPassword, user, profile } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect authenticated users to their dashboard
+  useEffect(() => {
+    if (user && profile) {
+      switch (profile.user_type) {
+        case 'job_seeker':
+          navigate('/dashboard/jobseeker');
+          break;
+        case 'company':
+          navigate('/dashboard/company');
+          break;
+        case 'hr':
+          navigate('/dashboard/hr');
+          break;
+        default:
+          navigate('/');
+      }
+    }
+  }, [user, profile, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
