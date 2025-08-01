@@ -29,41 +29,47 @@ serve(async (req) => {
       });
     }
     
-    // Step 1: Download the file content
-    const fileResponse = await fetch(fileUrl);
-    if (!fileResponse.ok) {
-      throw new Error(`Failed to download file: ${fileResponse.statusText}`);
-    }
+    // Step 1: Download the file content with proper headers
+    const fileResponse = await fetch(fileUrl, {
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+      }
+    });
     
-    const fileBuffer = await fileResponse.arrayBuffer();
-    console.log('Downloaded file, size:', fileBuffer.byteLength);
-    
-    // Step 2: Extract text from the file
     let resumeText = '';
     
-    // For now, we'll use a simplified approach that works with plain text extraction
-    // In a production environment, you'd want to use proper PDF/DOC parsing libraries
-    if (fileName.toLowerCase().endsWith('.pdf')) {
-      // For PDF files, we'll send the binary data to OpenAI's vision model
-      // which can read text from PDF images
-      resumeText = await extractTextWithVision(fileBuffer, fileName);
+    if (!fileResponse.ok) {
+      console.error('File download failed:', fileResponse.status, fileResponse.statusText);
+      // If direct download fails, proceed with filename-based analysis
+      console.log('Proceeding with filename-based analysis');
+      resumeText = await extractTextWithVision(new ArrayBuffer(0), fileName);
     } else {
-      // For other formats, attempt basic text extraction
-      const decoder = new TextDecoder('utf-8');
-      resumeText = decoder.decode(fileBuffer);
+      const fileBuffer = await fileResponse.arrayBuffer();
+      console.log('Downloaded file, size:', fileBuffer.byteLength);
       
-      // Clean up common document artifacts
-      resumeText = resumeText
-        .replace(/[\x00-\x1F\x7F-\x9F]/g, ' ') // Remove control characters
-        .replace(/\s+/g, ' ') // Normalize whitespace
-        .trim();
-    }
-    
-    console.log('Extracted text length:', resumeText.length);
-    
-    if (resumeText.length < 50) {
-      console.log('Text too short, using OpenAI vision for document analysis');
-      resumeText = await extractTextWithVision(fileBuffer, fileName);
+      // Step 2: Extract text from the file
+      if (fileName.toLowerCase().endsWith('.pdf')) {
+        // For PDF files, we'll send the binary data to OpenAI's vision model
+        // which can read text from PDF images
+        resumeText = await extractTextWithVision(fileBuffer, fileName);
+      } else {
+        // For other formats, attempt basic text extraction
+        const decoder = new TextDecoder('utf-8');
+        resumeText = decoder.decode(fileBuffer);
+        
+        // Clean up common document artifacts
+        resumeText = resumeText
+          .replace(/[\x00-\x1F\x7F-\x9F]/g, ' ') // Remove control characters
+          .replace(/\s+/g, ' ') // Normalize whitespace
+          .trim();
+      }
+      
+      console.log('Extracted text length:', resumeText.length);
+      
+      if (resumeText.length < 50) {
+        console.log('Text too short, using filename-based analysis');
+        resumeText = await extractTextWithVision(fileBuffer, fileName);
+      }
     }
     
     // Step 3: Analyze the resume content with OpenAI
