@@ -55,7 +55,10 @@ interface Resume {
   experience_years: number;
   job_role: string;
   ats_score: number;
-  summary: string;
+  summary: string | string[];
+  recommendations?: string[];
+  missing_skills?: string[];
+  strength_areas?: string[];
 }
 
 interface Application {
@@ -389,8 +392,147 @@ const JobSeekerDashboard = () => {
           </Alert>
         )}
 
+        {/* Resume AI Analysis - Full Width */}
+        {resumes.length > 0 && (
+          <Card className="shadow-lg border-2 border-blue-100 bg-gradient-to-br from-white to-blue-50/30">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center text-2xl">
+                <FileText className="h-7 w-7 mr-3 text-blue-600" />
+                AI Resume Analysis
+              </CardTitle>
+              <CardDescription className="text-lg">
+                Advanced ATS scoring and skill extraction powered by AI
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              {resumes.map((resume) => (
+                <div key={resume.id} className="bg-white rounded-xl p-8 shadow-sm border">
+                  {/* Header Section */}
+                  <div className="flex justify-between items-start mb-8">
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900 mb-2">{resume.file_name}</h3>
+                      {resume.job_role && (
+                        <div className="flex items-center mb-2">
+                          <Badge variant="outline" className="text-base px-4 py-2 bg-blue-50 text-blue-800 border-blue-200">
+                            {resume.job_role}
+                          </Badge>
+                          {resume.experience_years && (
+                            <span className="ml-3 text-gray-600 text-lg">
+                              {resume.experience_years} years experience
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {resume.ats_score && (
+                      <div className="text-center">
+                        <div className={`text-5xl font-bold mb-2 ${
+                          resume.ats_score >= 80 ? 'text-green-600' : 
+                          resume.ats_score >= 60 ? 'text-yellow-600' : 'text-red-600'
+                        }`}>
+                          {resume.ats_score}
+                        </div>
+                        <div className="text-sm text-gray-500 font-medium">ATS Score</div>
+                        <Progress 
+                          value={resume.ats_score} 
+                          className="w-24 h-3 mt-2"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Skills Section */}
+                  {resume.skills && resume.skills.length > 0 && (
+                    <div className="mb-8">
+                      <h4 className="text-lg font-semibold mb-4 flex items-center">
+                        <span className="w-4 h-4 bg-blue-600 rounded-full mr-2"></span>
+                        Technical Skills ({resume.skills.length})
+                      </h4>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {resume.skills.map((skill, index) => (
+                          <Badge 
+                            key={index} 
+                            variant="secondary" 
+                            className="text-sm px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-800 border border-blue-200 hover:bg-blue-100 transition-colors"
+                          >
+                            {skill}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Summary Section */}
+                  {resume.summary && (
+                    <div className="mb-8">
+                      <h4 className="text-lg font-semibold mb-4 flex items-center">
+                        <span className="w-4 h-4 bg-green-600 rounded-full mr-2"></span>
+                        Professional Summary
+                      </h4>
+                      <div className="bg-gray-50 rounded-lg p-6 border-l-4 border-blue-500">
+                        {Array.isArray(resume.summary) ? (
+                          <ul className="space-y-3">
+                            {resume.summary.map((line, index) => (
+                              <li key={index} className="text-gray-700 text-base leading-relaxed flex items-start">
+                                <span className="w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                                {line}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-gray-700 text-base leading-relaxed">{resume.summary}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recommendations & Missing Skills */}
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {resume.recommendations && resume.recommendations.length > 0 && (
+                      <div>
+                        <h4 className="text-lg font-semibold mb-4 flex items-center">
+                          <span className="w-4 h-4 bg-orange-500 rounded-full mr-2"></span>
+                          Recommendations
+                        </h4>
+                        <ul className="space-y-2">
+                          {resume.recommendations.map((rec, index) => (
+                            <li key={index} className="text-sm text-gray-600 flex items-start">
+                              <span className="text-orange-500 mr-2">•</span>
+                              {rec}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {resume.missing_skills && resume.missing_skills.length > 0 && (
+                      <div>
+                        <h4 className="text-lg font-semibold mb-4 flex items-center">
+                          <span className="w-4 h-4 bg-red-500 rounded-full mr-2"></span>
+                          Skills to Add
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {resume.missing_skills.map((skill, index) => (
+                            <Badge 
+                              key={index} 
+                              variant="outline" 
+                              className="text-sm border-red-200 text-red-700 bg-red-50"
+                            >
+                              {skill}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Sidebar - Profile & Resume */}
+          {/* Left Sidebar - Profile & Resume Upload */}
           <div className="space-y-6">
             {/* Profile Summary */}
             <Card>
@@ -476,7 +618,7 @@ const JobSeekerDashboard = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
                   <Upload className="h-12 w-12 mx-auto text-gray-400 mb-4" />
                   <div className="space-y-2">
                     <p className="text-sm text-gray-600">
@@ -504,57 +646,6 @@ const JobSeekerDashboard = () => {
                     </label>
                   </div>
                 </div>
-
-                {/* Resume Analysis Results */}
-                {resumes.length > 0 && (
-                  <div className="mt-6 space-y-4">
-                    <h4 className="font-medium">Your Resumes</h4>
-                    {resumes.map((resume) => (
-                      <div key={resume.id} className="border rounded-lg p-4 space-y-2">
-                        <div className="flex justify-between items-start">
-                          <h5 className="font-medium text-sm">{resume.file_name}</h5>
-                          {resume.ats_score && (
-                            <Badge variant="secondary">
-                              ATS Score: {resume.ats_score}/100
-                            </Badge>
-                          )}
-                        </div>
-                        {resume.job_role && (
-                          <p className="text-sm text-gray-600">
-                            <strong>Role:</strong> {resume.job_role}
-                          </p>
-                        )}
-                        {resume.experience_years && (
-                          <p className="text-sm text-gray-600">
-                            <strong>Experience:</strong> {resume.experience_years} years
-                          </p>
-                        )}
-                        {resume.skills && resume.skills.length > 0 && (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium">Skills:</p>
-                            <div className="flex flex-wrap gap-1">
-                              {resume.skills.slice(0, 6).map((skill, index) => (
-                                <Badge key={index} variant="outline" className="text-xs">
-                                  {skill}
-                                </Badge>
-                              ))}
-                              {resume.skills.length > 6 && (
-                                <Badge variant="outline" className="text-xs">
-                                  +{resume.skills.length - 6} more
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        {resume.summary && (
-                          <p className="text-sm text-gray-600">
-                            <strong>Summary:</strong> {resume.summary}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
               </CardContent>
             </Card>
 
@@ -652,10 +743,10 @@ const JobSeekerDashboard = () => {
                             <div className="flex items-center">
                               <DollarSign className="h-4 w-4 mr-1" />
                               {job.salary_min && job.salary_max
-                                ? `$${job.salary_min.toLocaleString()} - $${job.salary_max.toLocaleString()}`
+                                ? `₹${job.salary_min.toLocaleString('en-IN')} - ₹${job.salary_max.toLocaleString('en-IN')}`
                                 : job.salary_min
-                                ? `$${job.salary_min.toLocaleString()}+`
-                                : `Up to $${job.salary_max?.toLocaleString()}`
+                                ? `₹${job.salary_min.toLocaleString('en-IN')}+`
+                                : `Up to ₹${job.salary_max?.toLocaleString('en-IN')}`
                               }
                             </div>
                           )}

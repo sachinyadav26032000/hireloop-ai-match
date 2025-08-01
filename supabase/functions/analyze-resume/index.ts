@@ -108,37 +108,51 @@ async function extractTextWithVision(fileBuffer: ArrayBuffer, fileName: string):
 async function analyzeResumeWithAI(resumeText: string, fileName: string) {
   console.log('Starting AI analysis of resume text');
   
-  const prompt = `
-You are analyzing a resume document. Based on the filename "${fileName}" and any available content, generate a realistic professional analysis.
+const prompt = `
+You are an AI ATS resume analyzer. Extract technical and domain-specific skills from this resume.
 
-For someone with a filename like "Candidate Information Sheet.docx" or similar, assume this is a software developer's resume and generate appropriate analysis.
+Analyze the following resume text and extract:
+
+1. "skills": List of ALL relevant technical, programming, cloud, and domain-specific skills (NO soft skills unless directly stated).
+   - For Java developers: Java, Spring Boot, REST API, Microservices, JPA, Hibernate, Maven, Docker, AWS, etc.
+   - For Data Scientists: Python, Pandas, NumPy, Scikit-Learn, TensorFlow, Machine Learning, Data Visualization, SQL, etc.
+   - For Frontend: React, JavaScript, TypeScript, HTML/CSS, Vue.js, Angular, Node.js, etc.
+   - Ignore generic words like "Communication", "Leadership", "Teamwork" unless specifically technical.
+
+2. "summary": Five concise, important lines that summarize the candidate's core expertise as seen in this resume.
+   - Focus on career highlights, domain focus, technical stack, years of experience, and project accomplishments.
+   - For Java developers: "Led backend systems with Spring Boot, Java 17, and Docker for fintech applications."
+   - For Data Scientists: "Built machine learning pipelines with Pandas, Scikit-Learn, TensorFlow for healthcare analytics."
 
 Return ONLY valid JSON in this exact format:
 
 {
-  "skills": ["JavaScript", "React", "Node.js", "Python", "AWS", "SQL", "Git", "Docker"],
-  "experience_years": 3,
-  "job_role": "Software Developer",
+  "skills": ["Java", "Spring Boot", "REST API", "Microservices", "Docker", "AWS", "MySQL", "Git"],
+  "experience_years": 4,
+  "job_role": "Backend Developer",
   "ats_score": 85,
-  "summary": "Experienced software developer with 3+ years of experience in full-stack development using modern technologies.",
-  "recommendations": ["Add more quantifiable achievements", "Include specific project outcomes", "Add certifications"],
-  "missing_skills": ["TypeScript", "Cloud Architecture", "DevOps"],
-  "strength_areas": ["Technical Skills", "Problem Solving", "Full-Stack Development"]
+  "summary": [
+    "Experienced Java developer with 4+ years building enterprise-grade applications using Spring Boot and microservices architecture.",
+    "Led development of REST APIs serving 100K+ daily requests with MySQL database optimization and AWS cloud deployment.",
+    "Expertise in containerization with Docker and CI/CD pipelines for automated testing and deployment workflows.",
+    "Strong background in financial technology with focus on payment processing systems and data security compliance.",
+    "Collaborated with cross-functional teams to deliver scalable solutions reducing system latency by 40%."
+  ],
+  "recommendations": ["Add cloud architecture certifications", "Include specific performance metrics", "Mention latest Spring Boot versions"],
+  "missing_skills": ["Kubernetes", "Redis", "Apache Kafka"],
+  "strength_areas": ["Backend Architecture", "API Development", "Cloud Technologies"]
 }
 
 Guidelines:
-- Generate realistic skills based on the job role indicated by filename
-- Provide reasonable experience years (1-5 for most professionals)
-- Create an appropriate job title
-- Score ATS between 70-90 for good resumes
-- Write a 2-sentence professional summary
-- Suggest 3 specific improvements
-- Identify 3 missing skills that would enhance the profile
-- List 3 key strength areas
+- Extract ONLY technical skills, frameworks, programming languages, tools, and platforms
+- Create 5 distinct summary lines showcasing real expertise and achievements
+- Focus on quantifiable accomplishments and specific technologies used
+- Provide realistic experience years based on resume content
+- Score ATS between 75-95 for technical roles
 
 Available Information:
 File Name: ${fileName}
-Content Preview: ${resumeText.substring(0, 500)}
+Content Preview: ${resumeText.substring(0, 1000)}
 `;
 
   try {
@@ -196,7 +210,7 @@ Content Preview: ${resumeText.substring(0, 500)}
       experience_years: typeof analysisResult.experience_years === 'number' ? analysisResult.experience_years : 0,
       job_role: typeof analysisResult.job_role === 'string' ? analysisResult.job_role : 'Professional',
       ats_score: typeof analysisResult.ats_score === 'number' ? Math.min(100, Math.max(1, analysisResult.ats_score)) : 75,
-      summary: typeof analysisResult.summary === 'string' ? analysisResult.summary : 'Professional with diverse experience and skills.',
+      summary: Array.isArray(analysisResult.summary) ? analysisResult.summary : [analysisResult.summary || 'Professional with diverse experience and skills.'],
       recommendations: Array.isArray(analysisResult.recommendations) ? analysisResult.recommendations : ['Update resume format', 'Add more quantifiable achievements'],
       missing_skills: Array.isArray(analysisResult.missing_skills) ? analysisResult.missing_skills : ['Communication skills', 'Leadership experience'],
       strength_areas: Array.isArray(analysisResult.strength_areas) ? analysisResult.strength_areas : ['Technical Skills', 'Problem Solving']
@@ -210,18 +224,24 @@ Content Preview: ${resumeText.substring(0, 500)}
     
     // Return a basic fallback analysis
     return {
-      skills: ['Communication', 'Problem Solving', 'Teamwork'],
+      skills: ['JavaScript', 'Python', 'SQL', 'Git'],
       experience_years: 2,
-      job_role: 'Professional',
-      ats_score: 65,
-      summary: 'Experienced professional with strong skills and dedication to excellence.',
+      job_role: 'Software Developer',
+      ats_score: 75,
+      summary: [
+        'Professional software developer with experience in web application development.',
+        'Skilled in modern programming languages and database technologies.',
+        'Strong foundation in version control and collaborative development practices.',
+        'Experienced in building user-facing applications and backend systems.',
+        'Committed to writing clean, maintainable code and following best practices.'
+      ],
       recommendations: [
         'Add more quantifiable achievements to demonstrate impact',
         'Include relevant certifications or training',
         'Optimize keywords for your target industry'
       ],
-      missing_skills: ['Industry-specific skills', 'Advanced technical skills'],
-      strength_areas: ['Communication', 'Adaptability', 'Work Ethic']
+      missing_skills: ['Cloud Technologies', 'Advanced Frameworks', 'DevOps Tools'],
+      strength_areas: ['Programming', 'Problem Solving', 'Technical Skills']
     };
   }
 }
