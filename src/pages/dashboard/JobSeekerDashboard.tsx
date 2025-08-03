@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,6 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -30,7 +33,13 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
-  Crown
+  Crown,
+  Trash2,
+  Calendar,
+  Send,
+  Download,
+  Star,
+  Sparkles
 } from 'lucide-react';
 
 interface Job {
@@ -88,6 +97,11 @@ const JobSeekerDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [canApply, setCanApply] = useState(true);
   const [applicationsLeft, setApplicationsLeft] = useState(3);
+  const [showApplyModal, setShowApplyModal] = useState(false);
+  const [selectedJobId, setSelectedJobId] = useState<string>('');
+  const [selectedResumeId, setSelectedResumeId] = useState<string>('');
+  const [preferredInterviewDate, setPreferredInterviewDate] = useState('');
+  const [coverLetter, setCoverLetter] = useState('');
 
   useEffect(() => {
     const initializeDashboard = async () => {
@@ -273,7 +287,39 @@ const JobSeekerDashboard = () => {
     }
   };
 
-  const handleApplyToJob = async (jobId: string) => {
+  const handleDeleteResume = async (resumeId: string, fileUrl: string) => {
+    try {
+      // Extract file path from URL
+      const urlParts = fileUrl.split('/');
+      const fileName = urlParts[urlParts.length - 1];
+      const filePath = `${user?.id}/${fileName}`;
+
+      // Delete file from storage
+      const { error: storageError } = await supabase.storage
+        .from('resumes')
+        .remove([filePath]);
+
+      if (storageError) {
+        console.warn('Storage deletion warning:', storageError);
+      }
+
+      // Delete resume record from database
+      const { error: dbError } = await supabase
+        .from('resumes')
+        .delete()
+        .eq('id', resumeId);
+
+      if (dbError) throw dbError;
+
+      toast.success('Resume deleted successfully');
+      fetchResumes();
+    } catch (error: any) {
+      console.error('Error deleting resume:', error);
+      toast.error('Failed to delete resume');
+    }
+  };
+
+  const handleApplyToJob = (jobId: string) => {
     if (!user) {
       toast.error('Please log in to apply for jobs');
       return;
@@ -284,12 +330,27 @@ const JobSeekerDashboard = () => {
       return;
     }
 
+    if (resumes.length === 0) {
+      toast.error('Please upload a resume before applying to jobs');
+      return;
+    }
+
+    setSelectedJobId(jobId);
+    setShowApplyModal(true);
+  };
+
+  const submitApplication = async () => {
+    if (!selectedResumeId || !preferredInterviewDate) {
+      toast.error('Please select a resume and preferred interview date');
+      return;
+    }
+
     try {
       // Check if user has already applied to this job
       const { data: existingApplication } = await supabase
         .from('job_applications')
         .select('id')
-        .eq('job_id', jobId)
+        .eq('job_id', selectedJobId)
         .eq('applicant_id', user.id)
         .single();
 
@@ -298,18 +359,57 @@ const JobSeekerDashboard = () => {
         return;
       }
 
+      // Get selected resume and job details
+      const selectedResume = resumes.find(r => r.id === selectedResumeId);
+      const selectedJob = jobs.find(j => j.id === selectedJobId);
+
+      if (!selectedResume || !selectedJob) {
+        toast.error('Invalid resume or job selection');
+        return;
+      }
+
       // Create new application
-      const { error } = await supabase
+      const { data: applicationData, error: applicationError } = await supabase
         .from('job_applications')
         .insert({
-          job_id: jobId,
+          job_id: selectedJobId,
           applicant_id: user.id,
+          resume_id: selectedResumeId,
+          cover_letter: coverLetter,
           status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (applicationError) throw applicationError;
+
+      // Send email notifications
+      const { error: emailError } = await supabase.functions
+        .invoke('send-application-email', {
+          body: {
+            hrEmail: selectedJob.profiles.full_name, // Assume this is email for now
+            candidateEmail: user.email,
+            candidateName: profile?.full_name || 'Unknown',
+            jobTitle: selectedJob.title,
+            companyName: selectedJob.profiles.company_name,
+            resumeUrl: selectedResume.file_url,
+            skills: selectedResume.skills || [],
+            preferredInterviewDate,
+            coverLetter,
+            applicationId: applicationData.id
+          }
         });
 
-      if (error) throw error;
+      if (emailError) {
+        console.warn('Email notification failed:', emailError);
+      }
 
       toast.success('Application submitted successfully!');
+      setShowApplyModal(false);
+      setSelectedJobId('');
+      setSelectedResumeId('');
+      setPreferredInterviewDate('');
+      setCoverLetter('');
       
       // Refresh data to update counts
       fetchApplications();
@@ -340,57 +440,81 @@ const JobSeekerDashboard = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-gradient-hero relative overflow-hidden">
+      {/* Floating Background Elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 left-10 w-72 h-72 bg-white/10 rounded-full floating" />
+        <div className="absolute top-40 right-20 w-96 h-96 bg-white/5 rounded-full floating-delayed" />
+        <div className="absolute bottom-20 left-1/3 w-64 h-64 bg-white/10 rounded-full floating" />
+      </div>
+
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <motion.header 
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.6 }}
+        className="relative z-10 glass border-b border-white/20"
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <Button variant="ghost" onClick={() => navigate('/')} className="mr-4">
+              <Button variant="ghost" onClick={() => navigate('/')} className="mr-4 text-white hover:bg-white/10">
                 <Home className="h-4 w-4 mr-2" />
                 Home
               </Button>
-              <h1 className="text-2xl font-bold text-gray-900">Hireloop</h1>
-              <span className="ml-4 text-sm text-gray-600">Job Seeker Dashboard</span>
+              <div className="flex items-center">
+                <Sparkles className="h-8 w-8 text-white mr-3" />
+                <h1 className="text-2xl font-bold text-white">HireLoop</h1>
+              </div>
+              <span className="ml-4 text-sm text-white/80">Job Seeker Dashboard</span>
             </div>
             <div className="flex items-center space-x-4">
               {!canApply && applicationsLeft === 0 && (
-                <Badge className="bg-orange-100 text-orange-800">
+                <Badge className="bg-warning/20 text-warning border-warning/30 animate-pulse-glow">
                   <Crown className="h-3 w-3 mr-1" />
                   Upgrade to Premium
                 </Badge>
               )}
-              <span className="text-sm text-gray-700">
+              <span className="text-sm text-white/90">
                 Welcome, {profile?.full_name || 'Job Seeker'}
               </span>
-              <Button variant="outline" onClick={signOut}>
+              <Button variant="outline" onClick={signOut} className="border-white/30 text-white hover:bg-white/10">
                 <LogOut className="h-4 w-4 mr-2" />
                 Logout
               </Button>
             </div>
           </div>
         </div>
-      </header>
+      </motion.header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Application Limits Alert */}
-        {!canApply && (
-          <Alert className="mb-6 border-orange-200 bg-orange-50">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              <div className="flex justify-between items-center">
-                <span>
-                  You've reached your free application limit (3 applications). 
-                  Upgrade to premium for unlimited applications.
-                </span>
-                <Button size="sm" className="ml-4">
-                  <Crown className="h-4 w-4 mr-2" />
-                  Upgrade Now
-                </Button>
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
+        <AnimatePresence>
+          {!canApply && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Alert className="mb-6 border-warning/30 bg-warning/10 glass">
+                <AlertTriangle className="h-4 w-4 text-warning" />
+                <AlertDescription>
+                  <div className="flex justify-between items-center">
+                    <span className="text-white/90">
+                      You've reached your free application limit (3 applications). 
+                      Upgrade to premium for unlimited applications.
+                    </span>
+                    <Button size="sm" className="ml-4 btn-gradient">
+                      <Crown className="h-4 w-4 mr-2" />
+                      Upgrade Now
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Resume AI Analysis - Full Width */}
         {resumes.length > 0 && (
@@ -406,85 +530,144 @@ const JobSeekerDashboard = () => {
             </CardHeader>
             <CardContent className="space-y-8">
               {resumes.map((resume) => (
-                <div key={resume.id} className="bg-white rounded-xl p-8 shadow-sm border">
-                  {/* Header Section */}
-                  <div className="flex justify-between items-start mb-8">
-                    <div>
-                      <h3 className="text-xl font-bold text-gray-900 mb-2">{resume.file_name}</h3>
-                      {resume.job_role && (
-                        <div className="flex items-center mb-2">
-                          <Badge variant="outline" className="text-base px-4 py-2 bg-blue-50 text-blue-800 border-blue-200">
-                            {resume.job_role}
-                          </Badge>
-                          {resume.experience_years && (
-                            <span className="ml-3 text-gray-600 text-lg">
-                              {resume.experience_years} years experience
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    {resume.ats_score && (
-                      <div className="text-center">
-                        <div className={`text-5xl font-bold mb-2 ${
-                          resume.ats_score >= 80 ? 'text-green-600' : 
-                          resume.ats_score >= 60 ? 'text-yellow-600' : 'text-red-600'
-                        }`}>
-                          {resume.ats_score}
-                        </div>
-                        <div className="text-sm text-gray-500 font-medium">ATS Score</div>
-                        <Progress 
-                          value={resume.ats_score} 
-                          className="w-24 h-3 mt-2"
-                        />
-                      </div>
-                    )}
+                 <motion.div 
+                   key={resume.id} 
+                   initial={{ opacity: 0, y: 20 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   transition={{ duration: 0.5 }}
+                   className="card-modern rounded-xl p-8 hover-lift"
+                 >
+                   {/* Header Section */}
+                   <div className="flex justify-between items-start mb-8">
+                     <div className="flex-1">
+                       <div className="flex items-center justify-between mb-4">
+                         <h3 className="text-xl font-bold text-gray-900">{resume.file_name}</h3>
+                         <div className="flex items-center space-x-2">
+                           <Button
+                             variant="outline"
+                             size="sm"
+                             className="text-gray-600 hover:text-blue-600"
+                             onClick={() => window.open(resume.file_url, '_blank')}
+                           >
+                             <Download className="h-4 w-4 mr-1" />
+                             View
+                           </Button>
+                           <Button
+                             variant="destructive"
+                             size="sm"
+                             onClick={() => handleDeleteResume(resume.id, resume.file_url)}
+                             className="hover:scale-105 transition-transform"
+                           >
+                             <Trash2 className="h-4 w-4 mr-1" />
+                             Delete
+                           </Button>
+                         </div>
+                       </div>
+                       {resume.job_role && (
+                         <div className="flex items-center mb-2">
+                           <Badge className="badge-gradient text-base px-4 py-2">
+                             {resume.job_role}
+                           </Badge>
+                           {resume.experience_years && (
+                             <span className="ml-3 text-gray-600 text-lg flex items-center">
+                               <Star className="h-4 w-4 mr-1 text-yellow-500" />
+                               {resume.experience_years} years experience
+                             </span>
+                           )}
+                         </div>
+                       )}
+                     </div>
+                     {resume.ats_score && (
+                       <motion.div 
+                         className="text-center"
+                         whileHover={{ scale: 1.05 }}
+                         transition={{ duration: 0.2 }}
+                       >
+                         <div className="relative">
+                           <div 
+                             className="ats-circle mx-auto mb-3 shadow-glow"
+                             style={{ '--percentage': `${resume.ats_score}%` } as React.CSSProperties}
+                           >
+                             <span className="ats-score-text text-gray-900">
+                               {resume.ats_score}
+                             </span>
+                           </div>
+                           <div className="text-sm text-gray-500 font-medium">ATS Score</div>
+                           <div className={`text-xs mt-1 font-medium ${
+                             resume.ats_score >= 80 ? 'text-success' : 
+                             resume.ats_score >= 60 ? 'text-warning' : 'text-destructive'
+                           }`}>
+                             {resume.ats_score >= 80 ? 'Excellent' : 
+                              resume.ats_score >= 60 ? 'Good' : 'Needs Improvement'}
+                           </div>
+                         </div>
+                       </motion.div>
+                     )}
                   </div>
 
-                  {/* Skills Section */}
-                  {resume.skills && resume.skills.length > 0 && (
-                    <div className="mb-8">
-                      <h4 className="text-lg font-semibold mb-4 flex items-center">
-                        <span className="w-4 h-4 bg-blue-600 rounded-full mr-2"></span>
-                        Technical Skills ({resume.skills.length})
-                      </h4>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                        {resume.skills.map((skill, index) => (
-                          <Badge 
-                            key={index} 
-                            variant="secondary" 
-                            className="text-sm px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-800 border border-blue-200 hover:bg-blue-100 transition-colors"
-                          >
-                            {skill}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                   {/* Skills Section */}
+                   {resume.skills && resume.skills.length > 0 && (
+                     <motion.div 
+                       className="mb-8"
+                       initial={{ opacity: 0, x: -20 }}
+                       animate={{ opacity: 1, x: 0 }}
+                       transition={{ delay: 0.2 }}
+                     >
+                       <h4 className="text-lg font-semibold mb-4 flex items-center">
+                         <span className="w-4 h-4 bg-gradient-primary rounded-full mr-2 animate-pulse-glow"></span>
+                         Technical Skills ({resume.skills.length})
+                       </h4>
+                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                         {resume.skills.map((skill, index) => (
+                           <motion.div
+                             key={index}
+                             initial={{ opacity: 0, scale: 0.9 }}
+                             animate={{ opacity: 1, scale: 1 }}
+                             transition={{ delay: index * 0.05 }}
+                           >
+                             <Badge className="skill-tag w-full justify-center">
+                               {skill}
+                             </Badge>
+                           </motion.div>
+                         ))}
+                       </div>
+                     </motion.div>
+                   )}
 
-                  {/* Summary Section */}
-                  {resume.summary && (
-                    <div className="mb-8">
-                      <h4 className="text-lg font-semibold mb-4 flex items-center">
-                        <span className="w-4 h-4 bg-green-600 rounded-full mr-2"></span>
-                        Professional Summary
-                      </h4>
-                      <div className="bg-gray-50 rounded-lg p-6 border-l-4 border-blue-500">
-                        {Array.isArray(resume.summary) ? (
-                          <ul className="space-y-3">
-                            {resume.summary.map((line, index) => (
-                              <li key={index} className="text-gray-700 text-base leading-relaxed flex items-start">
-                                <span className="w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                                {line}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="text-gray-700 text-base leading-relaxed">{resume.summary}</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                   {/* Summary Section */}
+                   {resume.summary && (
+                     <motion.div 
+                       className="mb-8"
+                       initial={{ opacity: 0, y: 20 }}
+                       animate={{ opacity: 1, y: 0 }}
+                       transition={{ delay: 0.3 }}
+                     >
+                       <h4 className="text-lg font-semibold mb-4 flex items-center">
+                         <span className="w-4 h-4 bg-success rounded-full mr-2"></span>
+                         Professional Summary
+                       </h4>
+                       <div className="glass p-6 border-l-4 border-gradient-primary rounded-lg">
+                         {Array.isArray(resume.summary) ? (
+                           <ul className="space-y-4">
+                             {resume.summary.map((line, index) => (
+                               <motion.li 
+                                 key={index} 
+                                 className="text-gray-700 text-base leading-relaxed flex items-start"
+                                 initial={{ opacity: 0, x: -10 }}
+                                 animate={{ opacity: 1, x: 0 }}
+                                 transition={{ delay: 0.4 + index * 0.1 }}
+                               >
+                                 <span className="w-2 h-2 bg-gradient-primary rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                                 {line}
+                               </motion.li>
+                             ))}
+                           </ul>
+                         ) : (
+                           <p className="text-gray-700 text-base leading-relaxed">{resume.summary}</p>
+                         )}
+                       </div>
+                     </motion.div>
+                   )}
 
                   {/* Recommendations & Missing Skills */}
                   <div className="grid md:grid-cols-2 gap-6">
@@ -525,17 +708,98 @@ const JobSeekerDashboard = () => {
                       </div>
                     )}
                   </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+                 </motion.div>
+               ))}
+             </CardContent>
+           </Card>
         )}
+
+        {/* Application Modal */}
+        <Dialog open={showApplyModal} onOpenChange={setShowApplyModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <Send className="h-5 w-5 mr-2 text-primary" />
+                Apply for Job
+              </DialogTitle>
+              <DialogDescription>
+                Complete your application with the details below.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="resume-select">Select Resume</Label>
+                <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a resume" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {resumes.map((resume) => (
+                      <SelectItem key={resume.id} value={resume.id}>
+                        {resume.file_name} {resume.job_role && `(${resume.job_role})`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <Label htmlFor="interview-date">Preferred Interview Date</Label>
+                <Input
+                  id="interview-date"
+                  type="datetime-local"
+                  value={preferredInterviewDate}
+                  onChange={(e) => setPreferredInterviewDate(e.target.value)}
+                  min={new Date().toISOString().slice(0, 16)}
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="cover-letter">Cover Letter (Optional)</Label>
+                <Textarea
+                  id="cover-letter"
+                  placeholder="Tell the employer why you're a great fit for this role..."
+                  value={coverLetter}
+                  onChange={(e) => setCoverLetter(e.target.value)}
+                  rows={4}
+                />
+              </div>
+              
+              {selectedResumeId && (
+                <div className="p-3 bg-blue-50 rounded-lg">
+                  <h4 className="font-medium text-sm mb-2">Your Skills</h4>
+                  <div className="flex flex-wrap gap-1">
+                    {resumes.find(r => r.id === selectedResumeId)?.skills?.slice(0, 6).map((skill, index) => (
+                      <Badge key={index} variant="secondary" className="text-xs">
+                        {skill}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowApplyModal(false)}>
+                Cancel
+              </Button>
+              <Button onClick={submitApplication} className="btn-gradient">
+                <Send className="h-4 w-4 mr-2" />
+                Submit Application
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Sidebar - Profile & Resume Upload */}
-          <div className="space-y-6">
+          <motion.div 
+            className="space-y-6"
+            initial={{ opacity: 0, x: -50 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+          >
             {/* Profile Summary */}
-            <Card>
+            <Card className="card-modern hover-lift">
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   <span className="flex items-center">
@@ -607,7 +871,7 @@ const JobSeekerDashboard = () => {
             </Card>
 
             {/* Resume Upload */}
-            <Card>
+            <Card className="card-modern hover-lift">
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <FileText className="h-5 w-5 mr-2" />
@@ -650,7 +914,7 @@ const JobSeekerDashboard = () => {
             </Card>
 
             {/* Application Tracking */}
-            <Card>
+            <Card className="card-modern hover-lift">
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Briefcase className="h-5 w-5 mr-2" />
@@ -688,12 +952,17 @@ const JobSeekerDashboard = () => {
                 )}
               </CardContent>
             </Card>
-          </div>
+          </motion.div>
 
           {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
+          <motion.div 
+            className="lg:col-span-2 space-y-6"
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+          >
             {/* Search Jobs */}
-            <Card>
+            <Card className="card-modern">
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Briefcase className="h-5 w-5 mr-2" />
@@ -724,9 +993,15 @@ const JobSeekerDashboard = () => {
                       <Briefcase className="h-12 w-12 mx-auto text-gray-400 mb-4" />
                       <p className="text-gray-600">No jobs found matching your search.</p>
                     </div>
-                  ) : (
-                    filteredJobs.map((job) => (
-                      <div key={job.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                   ) : (
+                     filteredJobs.map((job, index) => (
+                       <motion.div 
+                         key={job.id} 
+                         className="card-modern p-6 hover-lift"
+                         initial={{ opacity: 0, y: 20 }}
+                         animate={{ opacity: 1, y: 0 }}
+                         transition={{ delay: index * 0.1 }}
+                       >
                         <div className="flex justify-between items-start mb-2">
                           <h3 className="font-semibold text-lg">{job.title}</h3>
                           <Badge variant="secondary">{job.job_type?.replace('_', ' ') || 'Full-time'}</Badge>
@@ -754,46 +1029,54 @@ const JobSeekerDashboard = () => {
                         <p className="text-sm text-gray-700 mb-4 line-clamp-3">
                           {job.description}
                         </p>
-                        <div className="flex justify-between items-center">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => navigate(`/jobs/${job.id}`)}
-                          >
-                            View Details
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            onClick={() => handleApplyToJob(job.id)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white"
-                            disabled={!canApply}
-                          >
-                            {!canApply ? 'Upgrade to Apply' : 'Apply Now'}
-                          </Button>
-                        </div>
-                      </div>
+                         <div className="flex justify-between items-center">
+                           <Button 
+                             variant="outline" 
+                             size="sm"
+                             onClick={() => navigate(`/jobs/${job.id}`)}
+                             className="hover-lift"
+                           >
+                             <Eye className="h-4 w-4 mr-1" />
+                             View Details
+                           </Button>
+                           <Button 
+                             size="sm" 
+                             onClick={() => handleApplyToJob(job.id)}
+                             className="btn-gradient hover-lift"
+                             disabled={!canApply}
+                           >
+                             <Send className="h-4 w-4 mr-1" />
+                             {!canApply ? 'Upgrade to Apply' : 'Apply Now'}
+                           </Button>
+                         </div>
+                       </motion.div>
                     ))
                   )}
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+               </CardContent>
+             </Card>
+           </motion.div>
+         </div>
       </div>
 
       {/* Footer */}
-      <footer className="bg-white border-t mt-16">
+      <motion.footer 
+        className="glass border-t mt-16 relative z-10"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1 }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center">
-            <p className="text-sm text-gray-600">
-              © 2024 Hireloop. All rights reserved.
+            <p className="text-sm text-white/80">
+              © 2024 HireLoop. All rights reserved.
             </p>
-            <p className="text-sm text-gray-500 mt-2">
+            <p className="text-sm text-white/60 mt-2">
               Founders: Sachin Yadav and Sudarshan Krishnamurthy
             </p>
           </div>
         </div>
-      </footer>
+      </motion.footer>
     </div>
   );
 };
