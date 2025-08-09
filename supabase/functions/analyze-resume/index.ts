@@ -1,245 +1,321 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import { getDocument } from "npm:pdfjs-dist@4.7.76/legacy/build/pdf.mjs";
+import mammoth from "npm:mammoth@1.8.0";
 
+// CORS
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+// Env
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+
+// Supabase admin client (for private storage download)
+const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
+  : null;
+
+// Request types
+interface AnalyzeRequest {
+  storagePath?: string; // preferred, e.g. "<user-id>/<filename>.pdf"
+  bucket?: string; // default: "resumes"
+  fileUrl?: string; // legacy/public URL (we will parse & use admin download)
+  fileName?: string; // optional hint
+}
+
+interface AnalyzeResult {
+  skills: string[];
+  experience_years: number;
+  job_role: string;
+  ats_score: number;
+  summary: string[];
+  recommendations?: string[];
+  missing_skills?: string[];
+  strength_areas?: string[];
+}
+
+// Helpers: type detection
+const isPdf = (fileName?: string, contentType?: string) =>
+  (fileName?.toLowerCase().endsWith(".pdf") ?? false) || (contentType?.includes("pdf") ?? false);
+
+const isDocx = (fileName?: string, contentType?: string) =>
+  (fileName?.toLowerCase().endsWith(".docx") ?? false) || contentType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+function cleanExtractedText(text: string): string {
+  try {
+    return text
+      .replace(/[\t\r]+/g, " ")
+      .replace(/\u00A0/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .replace(/-\s+/g, "-")
+      .replace(/[•·●▪◦]/g, "-")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  } catch {
+    return text;
+  }
+}
+
+// Parse storage info from a Supabase URL
+function parseSupabaseStoragePath(url: string): { bucket: string; path: string } | null {
+  try {
+    const u = new URL(url);
+    const parts = u.pathname.split("/").filter(Boolean);
+    const i = parts.findIndex((p) => p === "storage");
+    if (i === -1) return null;
+    const after = parts.slice(i);
+    const objectIdx = after.findIndex((p) => p === "object");
+    if (objectIdx === -1) return null;
+    let bucketIdx = objectIdx + 1;
+    if (after[bucketIdx] === "public" || after[bucketIdx] === "sign") bucketIdx += 1;
+    const bucket = after[bucketIdx];
+    const path = decodeURIComponent(after.slice(bucketIdx + 1).join("/"));
+    if (!bucket || !path) return null;
+    return { bucket, path };
+  } catch (e) {
+    console.log("parseSupabaseStoragePath failed", e);
+    return null;
+  }
+}
+
+async function downloadFromSupabase(bucket: string, path: string) {
+  if (!supabaseAdmin) throw new Error("Supabase admin client not configured");
+  const { data, error } = await supabaseAdmin.storage.from(bucket).download(path);
+  if (error) throw new Error(`Storage download error: ${error.message}`);
+  return { buffer: await data.arrayBuffer(), contentType: data.type || undefined };
+}
+
+async function fetchViaHttp(fileUrl: string) {
+  const res = await fetch(fileUrl);
+  if (!res.ok) throw new Error(`HTTP download failed: ${res.status} ${res.statusText}`);
+  return { buffer: await res.arrayBuffer(), contentType: res.headers.get("content-type") || undefined };
+}
+
+async function extractPdf(buffer: ArrayBuffer): Promise<string> {
+  const loadingTask = getDocument({ data: new Uint8Array(buffer), isEvalSupported: false } as any);
+  const pdf = await loadingTask.promise;
+  let out = "";
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = (content.items as any[]).map((it) => (typeof it?.str === "string" ? it.str : "")).join(" ");
+    out += pageText + "\n";
+  }
+  return cleanExtractedText(out);
+}
+
+async function extractDocx(buffer: ArrayBuffer): Promise<string> {
+  const { value } = await mammoth.extractRawText({ arrayBuffer: buffer } as any);
+  return cleanExtractedText(value || "");
+}
+
+async function extractText(buffer: ArrayBuffer, fileName?: string, contentType?: string): Promise<string> {
+  try {
+    if (isPdf(fileName, contentType)) {
+      console.log("Extracting PDF text");
+      return await extractPdf(buffer);
+    }
+    if (isDocx(fileName, contentType)) {
+      console.log("Extracting DOCX text");
+      return await extractDocx(buffer);
+    }
+    console.log("Extracting as UTF-8 text");
+    const txt = new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(buffer));
+    return cleanExtractedText(txt);
+  } catch (e) {
+    console.error("extractText failed", e);
+    return "";
+  }
+}
+
+// Heuristic experience years from date ranges
+function computeExperienceYears(text: string): number {
+  try {
+    const monthMap: Record<string, number> = { jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7, sep: 8, sept: 8, september: 8, oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11 };
+    const ranges: Array<{ start: Date; end: Date }> = [];
+    const now = new Date();
+
+    const patterns = [
+      /(?<sm>jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(?<sy>\d{4})\s*[-–—]\s*(?<em>present|current|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s*(?<ey>\d{4})?/gi,
+      /(?<sy>\d{4})\s*[-–—]\s*(?<ey>present|current|\d{4})/gi,
+    ];
+
+    for (const p of patterns) {
+      let m: RegExpExecArray | null;
+      while ((m = p.exec(text)) !== null) {
+        let start: Date | null = null;
+        let end: Date | null = null;
+        if (m.groups?.sm && m.groups?.sy) {
+          const sm = (m.groups.sm || "").toLowerCase();
+          const sy = parseInt(m.groups.sy);
+          const emRaw = (m.groups.em || "").toLowerCase();
+          const eyRaw = (m.groups.ey || "").toLowerCase();
+          start = new Date(sy, monthMap[sm] ?? 0, 1);
+          if (emRaw === "present" || emRaw === "current") {
+            end = now;
+          } else {
+            const em = monthMap[emRaw] ?? 0;
+            const ey = eyRaw ? parseInt(eyRaw) : sy;
+            end = new Date(ey, em, 1);
+          }
+        } else if (m.groups?.sy && m.groups?.ey) {
+          const sy = parseInt(m.groups.sy);
+          const eyRaw = (m.groups.ey || "").toLowerCase();
+          start = new Date(sy, 0, 1);
+          end = eyRaw === "present" || eyRaw === "current" ? now : new Date(parseInt(eyRaw), 0, 1);
+        }
+        if (start && end && end >= start) ranges.push({ start, end });
+      }
+    }
+    if (ranges.length === 0) return 0;
+    const earliest = ranges.reduce((a, b) => (a.start < b.start ? a : b)).start;
+    const latest = ranges.reduce((a, b) => (a.end > b.end ? a : b)).end;
+    const months = (latest.getFullYear() - earliest.getFullYear()) * 12 + (latest.getMonth() - earliest.getMonth());
+    return Math.max(0, Math.round((months / 12) * 10) / 10);
+  } catch (e) {
+    console.log("computeExperienceYears error", e);
+    return 0;
+  }
+}
+
+async function analyzeWithAI(resumeText: string, fileName?: string, experienceYearsHint?: number): Promise<AnalyzeResult> {
+  if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not configured");
+
+  const sys = `You are an expert resume analyzer in 2025. Analyze resumes across ALL industries and seniority levels. Be factual and only use information present in the text.`;
+  const user = `Resume text (sanitized):\n\n${resumeText.slice(0, 120_000)}\n\nInstructions:\n- Detect the most accurate job role/title (e.g., VP Sales, Director Operations, Business Analyst, Marketing Manager, Financial Analyst, Legal Counsel, UX Designer, Software Engineer).\n- Extract ONLY domain-specific, technical, and hard skills explicitly mentioned (tools, platforms, methodologies, frameworks). DO NOT include soft skills (e.g., communication, teamwork).\n- Compute years of experience based on actual employment dates in the resume. If unclear, use this hint: ${experienceYearsHint ?? 0}.\n- Provide a concise 5-line professional summary focused on achievements and domain expertise (no fluff).\n- Consider these categories when relevant: Executive Leadership; Business & Operations; Sales & BD; Marketing & Brand; Customer Experience; Finance & Accounting; Creative & Design; Legal & Compliance; Healthcare & Education; Technology.\n- If seniority is high (Director/VP/C-level), expected ATS score is higher (80-95).\n\nReturn ONLY valid JSON with this exact shape:\n{\n  "job_role": string,\n  "experience_years": number,\n  "skills": string[],\n  "summary": [string, string, string, string, string],\n  "ats_score": number,\n  "recommendations": string[],\n  "missing_skills": string[],\n  "strength_areas": string[]\n}`;
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      temperature: 0.2,
+      messages: [ { role: "system", content: sys }, { role: "user", content: user } ],
+    }),
+  });
+
+  if (!res.ok) throw new Error(`OpenAI API error: ${res.status} ${res.statusText}`);
+  const data = await res.json();
+  const content: string = data?.choices?.[0]?.message?.content ?? "";
+
+  let jsonText = content.trim();
+  const match = jsonText.match(/\{[\s\S]*\}/);
+  if (match) jsonText = match[0];
+
+  let parsed: AnalyzeResult;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch (e) {
+    console.error("AI returned non-JSON, using fallback", e, { preview: content.slice(0, 400) });
+    parsed = {
+      skills: [],
+      experience_years: experienceYearsHint ?? 0,
+      job_role: "Professional",
+      ats_score: Math.min(95, Math.max(50, 60 + Math.round((experienceYearsHint || 0) * 2))),
+      summary: [
+        "Experienced professional with domain expertise.",
+        "Proficient with relevant tools and methodologies.",
+        "Delivered measurable outcomes across projects.",
+        "Cross-functional collaboration on key initiatives.",
+        "Continuous improvement and learning mindset.",
+      ],
+      recommendations: [],
+      missing_skills: [],
+      strength_areas: [],
+    };
+  }
+
+  // Sanitize
+  parsed.skills = Array.from(new Set((parsed.skills || []).map((s) => `${s}`.trim()).filter(Boolean)));
+  parsed.summary = (parsed.summary || []).slice(0, 5).map((s) => `${s}`.trim()).filter(Boolean);
+  if (typeof parsed.experience_years !== "number" || !isFinite(parsed.experience_years)) parsed.experience_years = experienceYearsHint ?? 0;
+  if (typeof parsed.ats_score !== "number" || !isFinite(parsed.ats_score)) parsed.ats_score = Math.min(95, Math.max(50, 60 + Math.round((parsed.experience_years || 0) * 2)));
+  parsed.job_role = `${parsed.job_role || "Professional"}`.trim();
+
+  return parsed;
+}
 
 serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let status = 200;
+  let payload: any = { ok: false };
+
   try {
-    const { fileUrl, fileName } = await req.json();
-    
-    console.log('Analyzing resume:', fileName, 'URL:', fileUrl);
+    const body: AnalyzeRequest = await req.json();
+    const bucket = body.bucket || "resumes";
+    const { storagePath, fileUrl, fileName } = body;
 
-    if (!openaiApiKey) {
-      console.error('OpenAI API key not configured');
-      return new Response(JSON.stringify({ 
-        error: 'AI analysis service not configured.',
-        skills: [],
-        summary: []
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    console.log("Analyze request", { storagePath, bucket, hasUrl: Boolean(fileUrl), fileName });
 
-    // Step 1: Download the file content with proper headers
-    const fileResponse = await fetch(fileUrl, {
-      headers: {
-        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+    // Download
+    let buffer: ArrayBuffer;
+    let contentType: string | undefined;
+    let finalFileName = fileName || "document";
+
+    if (storagePath) {
+      const dl = await downloadFromSupabase(bucket, storagePath);
+      buffer = dl.buffer; contentType = dl.contentType; finalFileName = fileName || storagePath.split("/").pop() || finalFileName;
+    } else if (fileUrl) {
+      const parsed = parseSupabaseStoragePath(fileUrl);
+      if (parsed) {
+        console.log("Supabase URL detected → using admin download");
+        const dl = await downloadFromSupabase(parsed.bucket, parsed.path);
+        buffer = dl.buffer; contentType = dl.contentType; finalFileName = fileName || parsed.path.split("/").pop() || finalFileName;
+      } else {
+        console.log("HTTP download");
+        const dl = await fetchViaHttp(fileUrl);
+        buffer = dl.buffer; contentType = dl.contentType; finalFileName = fileName || new URL(fileUrl).pathname.split("/").pop() || finalFileName;
       }
-    });
-    
-    let resumeText = '';
-    
-    if (!fileResponse.ok) {
-      console.error('File download failed:', fileResponse.status, fileResponse.statusText);
-      // If direct download fails, proceed with filename-based analysis
-      console.log('Proceeding with filename-based analysis');
-      resumeText = await extractTextWithVision(new ArrayBuffer(0), fileName);
     } else {
-      const fileBuffer = await fileResponse.arrayBuffer();
-      console.log('Downloaded file, size:', fileBuffer.byteLength);
-      
-      // Step 2: Extract text from the file
-      if (fileName.toLowerCase().endsWith('.pdf')) {
-        // For PDF files, we'll send the binary data to OpenAI's vision model
-        // which can read text from PDF images
-        resumeText = await extractTextWithVision(fileBuffer, fileName);
-      } else {
-        // For other formats, attempt basic text extraction
-        const decoder = new TextDecoder('utf-8');
-        resumeText = decoder.decode(fileBuffer);
-        
-        // Clean up common document artifacts
-        resumeText = resumeText
-          .replace(/[\x00-\x1F\x7F-\x9F]/g, ' ') // Remove control characters
-          .replace(/\s+/g, ' ') // Normalize whitespace
-          .trim();
-      }
-      
-      console.log('Extracted text length:', resumeText.length);
-      
-      if (resumeText.length < 50) {
-        console.log('Text too short, using filename-based analysis');
-        resumeText = await extractTextWithVision(fileBuffer, fileName);
-      }
-    }
-    
-    // Step 3: Analyze the resume content with OpenAI
-    const analysisResult = await analyzeResumeWithAI(resumeText, fileName);
-    
-    console.log('Analysis complete:', analysisResult);
-
-    return new Response(JSON.stringify(analysisResult), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  } catch (error) {
-    console.error('Error in analyze-resume function:', error);
-    return new Response(JSON.stringify({ 
-      error: error.message || 'Failed to analyze resume'
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-});
-
-async function extractTextWithVision(fileBuffer: ArrayBuffer, fileName: string): Promise<string> {
-  try {
-    console.log('Using simplified text extraction for document');
-    
-    // For now, return a placeholder that will trigger AI analysis based on filename and basic info
-    // In a production environment, you'd integrate with proper document parsing services
-    return `Resume document: ${fileName}. Please analyze this as a professional resume document and extract relevant information based on common resume patterns.`;
-    
-  } catch (error) {
-    console.error('Text extraction failed:', error);
-    return `Resume document: ${fileName}. Professional document requiring analysis.`;
-  }
-}
-
-async function analyzeResumeWithAI(resumeText: string, fileName: string) {
-  console.log('Starting AI analysis of resume text');
-  
-const prompt = `
-You are an AI ATS resume analyzer.
-
-Analyze the following resume text and extract ONLY:
-
-1. "skills": All relevant technical, programming, cloud, tooling, and domain-specific HARD skills (no soft skills unless explicitly written as a technical capability).
-   - Java Engineering: Java, Spring Boot, REST API, Microservices, JPA, Hibernate, Maven/Gradle, Docker, Kubernetes, Kafka, Redis, AWS/GCP/Azure, CI/CD, testing frameworks (JUnit, Mockito)
-   - Data Science/Engineering: Python, Pandas, NumPy, Scikit-Learn, TensorFlow/PyTorch, SQL, Spark/PySpark, Airflow, ML Ops, Data Visualization (Matplotlib/Seaborn/Plotly), BigQuery/Redshift/Snowflake
-   - Frontend: React, TypeScript, JavaScript, Next.js, Redux, HTML, CSS/Sass, Tailwind, Webpack/Vite, Testing Library, Cypress, GraphQL
-   - Backend/DevOps: Node.js, Express, NestJS, Go, .NET, Docker, Kubernetes, Terraform, CI/CD, Nginx, Linux, Monitoring (Prometheus/Grafana), Postgres/MySQL/MongoDB/Redis
-   - Business/Consulting: SQL, Excel (advanced), Tableau/Power BI, BPMN, ERP (SAP/Oracle), CRM (Salesforce/HubSpot), Requirements Gathering, Process Mapping, KPI design
-   - Sales/Marketing: Salesforce, HubSpot, Google Analytics/GA4, SEO/SEM, Meta/Google Ads, Marketing Automation, Email Marketing platforms, CRM reporting
-   - Finance/Accounting: Excel (advanced), Financial Modeling, SAP/Oracle, Bloomberg/Reuters, Power BI/Tableau, GAAP/IFRS tools, Audit tools
-   - HR/Talent: HRIS (Workday, SAP SuccessFactors), ATS (Greenhouse, Lever), Payroll systems, People Analytics
-   - Legal/Compliance: Contract Management systems, eDiscovery, Regulatory frameworks (SOX, GDPR), Risk tools
-   - Creative/UI/UX: Figma, Sketch, Adobe XD/CC, Prototyping, Usability Testing, Design Systems
-   - Healthcare/Clinical: EHR/EMR, GCP, Clinical Trials, Pharmacovigilance tools
-   Include cloud providers and exact frameworks/libraries where present (AWS, Azure, GCP, Kafka, Spark, etc.).
-
-2. "summary": Exactly five concise lines that reflect REAL expertise shown in this resume.
-   - Mention domain focus, technical stack, years of relevant experience (if clear), typical project tasks, and notable achievements.
-   - Example (Java): "Led Spring Boot microservices on AWS with Docker/Kubernetes for fintech payments."
-   - Example (Data): "Built ML pipelines with Pandas/Scikit-Learn/TensorFlow for healthcare analytics."
-   - Avoid generic filler text. Tailor to the detected domain/role.
-
-Return ONLY valid JSON with these two fields and nothing else:
-{
-  "skills": [ ...array of skills... ],
-  "summary": [ ...exactly 5 lines... ]
-}
-
-Resume text:
-"""
-${resumeText}
-"""
-
-Strict rules:
-- Do NOT include soft skills (communication, leadership, teamwork) unless explicitly technical.
-- Prefer exact technology names and platforms. Deduplicate and normalize casing.
-- Output JSON only. No backticks, no prose, no comments.
-
-Available Information:
-File Name: ${fileName}
-Content Preview: ${resumeText.substring(0, 1000)}
-`;
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a professional resume analyzer. Always respond with valid JSON only, no additional text or explanations.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.1,
-        max_tokens: 1500
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`);
+      throw new Error("Missing storagePath or fileUrl");
     }
 
-    const aiResponse = await response.json();
-    const content = aiResponse.choices[0].message.content;
-    
-    console.log('Raw AI response:', content);
-    
-    // Parse the JSON response
-    let analysisResult;
-    try {
-      analysisResult = JSON.parse(content);
-    } catch (parseError) {
-      console.error('Failed to parse AI response as JSON:', parseError);
-      
-      // Fallback: try to extract JSON from the response
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        analysisResult = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('AI response was not valid JSON');
-      }
-    }
-    
-    // Validate and ensure required fields exist (skills, summary only)
-    const validatedResult = {
-      skills: Array.isArray(analysisResult.skills)
-        ? analysisResult.skills.filter((s: any) => typeof s === 'string' && s.trim().length > 0)
-        : [],
-      summary: Array.isArray(analysisResult.summary)
-        ? analysisResult.summary.slice(0, 5).map((s: any) => String(s))
-        : [],
-    };
+    // Extract
+    const text = await extractText(buffer, finalFileName, contentType);
+    console.log("Extracted text length:", text.length);
 
-    console.log('Validated analysis result:', validatedResult);
-    return validatedResult;
-    
-  } catch (error) {
-    console.error('AI analysis failed:', error);
-    
-    // Return a basic fallback analysis
-    return {
-      skills: ['JavaScript', 'Python', 'SQL', 'Git'],
-      experience_years: 2,
-      job_role: 'Software Developer',
-      ats_score: 75,
+    // Experience
+    const experienceYears = computeExperienceYears(text);
+
+    // AI analysis
+    const analysis = await analyzeWithAI(text, finalFileName, experienceYears);
+
+    payload = { ok: true, ...analysis };
+  } catch (e: any) {
+    console.error("analyze-resume error", e);
+    // Always 2xx with fallback payload
+    status = 200;
+    payload = {
+      ok: false,
+      error: e?.message || "Unknown error",
+      skills: ["Project Management", "Client Relations"],
+      experience_years: 0,
+      job_role: "Professional",
+      ats_score: 70,
       summary: [
-        'Professional software developer with experience in web application development.',
-        'Skilled in modern programming languages and database technologies.',
-        'Strong foundation in version control and collaborative development practices.',
-        'Experienced in building user-facing applications and backend systems.',
-        'Committed to writing clean, maintainable code and following best practices.'
+        "Experienced professional with relevant domain exposure.",
+        "Demonstrated proficiency with industry tools.",
+        "Delivered outcomes across projects and teams.",
+        "Improved processes and stakeholder satisfaction.",
+        "Adaptable with continuous learning mindset.",
       ],
-      recommendations: [
-        'Add more quantifiable achievements to demonstrate impact',
-        'Include relevant certifications or training',
-        'Optimize keywords for your target industry'
-      ],
-      missing_skills: ['Cloud Technologies', 'Advanced Frameworks', 'DevOps Tools'],
-      strength_areas: ['Programming', 'Problem Solving', 'Technical Skills']
-    };
+    } as AnalyzeResult & { ok: false; error: string };
   }
-}
+
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+  });
+});
