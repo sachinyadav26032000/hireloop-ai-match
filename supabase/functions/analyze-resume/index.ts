@@ -22,13 +22,15 @@ serve(async (req) => {
     if (!openaiApiKey) {
       console.error('OpenAI API key not configured');
       return new Response(JSON.stringify({ 
-        error: 'AI analysis service not configured. Please contact support.' 
+        error: 'AI analysis service not configured.',
+        skills: [],
+        summary: []
       }), {
-        status: 500,
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    
+
     // Step 1: Download the file content with proper headers
     const fileResponse = await fetch(fileUrl, {
       headers: {
@@ -109,52 +111,50 @@ async function analyzeResumeWithAI(resumeText: string, fileName: string) {
   console.log('Starting AI analysis of resume text');
   
 const prompt = `
-You are an AI ATS resume analyzer. Extract technical and domain-specific skills from this resume.
+You are an AI ATS resume analyzer.
 
-Analyze the following resume text and extract:
+Analyze the following resume text and extract ONLY:
 
-1. "skills": List of ALL relevant technical, programming, cloud, and domain-specific skills (NO soft skills unless directly stated).
-   - For Java developers: Java, Spring Boot, REST API, Microservices, JPA, Hibernate, Maven, Docker, AWS, etc.
-   - For Data Scientists: Python, Pandas, NumPy, Scikit-Learn, TensorFlow, Machine Learning, Data Visualization, SQL, etc.
-   - For Frontend: React, JavaScript, TypeScript, HTML/CSS, Vue.js, Angular, Node.js, etc.
-   - Ignore generic words like "Communication", "Leadership", "Teamwork" unless specifically technical.
+1. "skills": All relevant technical, programming, cloud, tooling, and domain-specific HARD skills (no soft skills unless explicitly written as a technical capability).
+   - Java Engineering: Java, Spring Boot, REST API, Microservices, JPA, Hibernate, Maven/Gradle, Docker, Kubernetes, Kafka, Redis, AWS/GCP/Azure, CI/CD, testing frameworks (JUnit, Mockito)
+   - Data Science/Engineering: Python, Pandas, NumPy, Scikit-Learn, TensorFlow/PyTorch, SQL, Spark/PySpark, Airflow, ML Ops, Data Visualization (Matplotlib/Seaborn/Plotly), BigQuery/Redshift/Snowflake
+   - Frontend: React, TypeScript, JavaScript, Next.js, Redux, HTML, CSS/Sass, Tailwind, Webpack/Vite, Testing Library, Cypress, GraphQL
+   - Backend/DevOps: Node.js, Express, NestJS, Go, .NET, Docker, Kubernetes, Terraform, CI/CD, Nginx, Linux, Monitoring (Prometheus/Grafana), Postgres/MySQL/MongoDB/Redis
+   - Business/Consulting: SQL, Excel (advanced), Tableau/Power BI, BPMN, ERP (SAP/Oracle), CRM (Salesforce/HubSpot), Requirements Gathering, Process Mapping, KPI design
+   - Sales/Marketing: Salesforce, HubSpot, Google Analytics/GA4, SEO/SEM, Meta/Google Ads, Marketing Automation, Email Marketing platforms, CRM reporting
+   - Finance/Accounting: Excel (advanced), Financial Modeling, SAP/Oracle, Bloomberg/Reuters, Power BI/Tableau, GAAP/IFRS tools, Audit tools
+   - HR/Talent: HRIS (Workday, SAP SuccessFactors), ATS (Greenhouse, Lever), Payroll systems, People Analytics
+   - Legal/Compliance: Contract Management systems, eDiscovery, Regulatory frameworks (SOX, GDPR), Risk tools
+   - Creative/UI/UX: Figma, Sketch, Adobe XD/CC, Prototyping, Usability Testing, Design Systems
+   - Healthcare/Clinical: EHR/EMR, GCP, Clinical Trials, Pharmacovigilance tools
+   Include cloud providers and exact frameworks/libraries where present (AWS, Azure, GCP, Kafka, Spark, etc.).
 
-2. "summary": Five concise, important lines that summarize the candidate's core expertise as seen in this resume.
-   - Focus on career highlights, domain focus, technical stack, years of experience, and project accomplishments.
-   - For Java developers: "Led backend systems with Spring Boot, Java 17, and Docker for fintech applications."
-   - For Data Scientists: "Built machine learning pipelines with Pandas, Scikit-Learn, TensorFlow for healthcare analytics."
+2. "summary": Exactly five concise lines that reflect REAL expertise shown in this resume.
+   - Mention domain focus, technical stack, years of relevant experience (if clear), typical project tasks, and notable achievements.
+   - Example (Java): "Led Spring Boot microservices on AWS with Docker/Kubernetes for fintech payments."
+   - Example (Data): "Built ML pipelines with Pandas/Scikit-Learn/TensorFlow for healthcare analytics."
+   - Avoid generic filler text. Tailor to the detected domain/role.
 
-Return ONLY valid JSON in this exact format:
-
+Return ONLY valid JSON with these two fields and nothing else:
 {
-  "skills": ["Java", "Spring Boot", "REST API", "Microservices", "Docker", "AWS", "MySQL", "Git"],
-  "experience_years": 4,
-  "job_role": "Backend Developer",
-  "ats_score": 85,
-  "summary": [
-    "Experienced Java developer with 4+ years building enterprise-grade applications using Spring Boot and microservices architecture.",
-    "Led development of REST APIs serving 100K+ daily requests with MySQL database optimization and AWS cloud deployment.",
-    "Expertise in containerization with Docker and CI/CD pipelines for automated testing and deployment workflows.",
-    "Strong background in financial technology with focus on payment processing systems and data security compliance.",
-    "Collaborated with cross-functional teams to deliver scalable solutions reducing system latency by 40%."
-  ],
-  "recommendations": ["Add cloud architecture certifications", "Include specific performance metrics", "Mention latest Spring Boot versions"],
-  "missing_skills": ["Kubernetes", "Redis", "Apache Kafka"],
-  "strength_areas": ["Backend Architecture", "API Development", "Cloud Technologies"]
+  "skills": [ ...array of skills... ],
+  "summary": [ ...exactly 5 lines... ]
 }
 
-Guidelines:
-- Extract ONLY technical skills, frameworks, programming languages, tools, and platforms
-- Create 5 distinct summary lines showcasing real expertise and achievements
-- Focus on quantifiable accomplishments and specific technologies used
-- Provide realistic experience years based on resume content
-- Score ATS between 75-95 for technical roles
+Resume text:
+"""
+${resumeText}
+"""
+
+Strict rules:
+- Do NOT include soft skills (communication, leadership, teamwork) unless explicitly technical.
+- Prefer exact technology names and platforms. Deduplicate and normalize casing.
+- Output JSON only. No backticks, no prose, no comments.
 
 Available Information:
 File Name: ${fileName}
 Content Preview: ${resumeText.substring(0, 1000)}
 `;
-
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -204,18 +204,16 @@ Content Preview: ${resumeText.substring(0, 1000)}
       }
     }
     
-    // Validate and ensure all required fields exist
+    // Validate and ensure required fields exist (skills, summary only)
     const validatedResult = {
-      skills: Array.isArray(analysisResult.skills) ? analysisResult.skills : [],
-      experience_years: typeof analysisResult.experience_years === 'number' ? analysisResult.experience_years : 0,
-      job_role: typeof analysisResult.job_role === 'string' ? analysisResult.job_role : 'Professional',
-      ats_score: typeof analysisResult.ats_score === 'number' ? Math.min(100, Math.max(1, analysisResult.ats_score)) : 75,
-      summary: Array.isArray(analysisResult.summary) ? analysisResult.summary : [analysisResult.summary || 'Professional with diverse experience and skills.'],
-      recommendations: Array.isArray(analysisResult.recommendations) ? analysisResult.recommendations : ['Update resume format', 'Add more quantifiable achievements'],
-      missing_skills: Array.isArray(analysisResult.missing_skills) ? analysisResult.missing_skills : ['Communication skills', 'Leadership experience'],
-      strength_areas: Array.isArray(analysisResult.strength_areas) ? analysisResult.strength_areas : ['Technical Skills', 'Problem Solving']
+      skills: Array.isArray(analysisResult.skills)
+        ? analysisResult.skills.filter((s: any) => typeof s === 'string' && s.trim().length > 0)
+        : [],
+      summary: Array.isArray(analysisResult.summary)
+        ? analysisResult.summary.slice(0, 5).map((s: any) => String(s))
+        : [],
     };
-    
+
     console.log('Validated analysis result:', validatedResult);
     return validatedResult;
     

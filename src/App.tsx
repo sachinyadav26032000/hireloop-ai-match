@@ -12,6 +12,7 @@ import JobSeekerDashboard from "./pages/dashboard/JobSeekerDashboard";
 import CompanyDashboard from "./pages/dashboard/CompanyDashboard";
 import HRDashboard from "./pages/dashboard/HRDashboard";
 import Jobs from "./pages/Jobs";
+import JobDetails from "./pages/JobDetails";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
