@@ -47,7 +47,7 @@ export default function JobDetails() {
         .from('jobs')
         .select('*')
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
       if (error || !data) {
         setJob(null);
@@ -64,8 +64,8 @@ export default function JobDetails() {
           .from('job_applications')
           .select('id')
           .eq('job_id', id)
-          .eq('user_id', user.id)
-          .maybeSingle();
+          .eq('applicant_id', user.id)
+          .maybeSingle<{ id: string }>();
         setApplied(Boolean(appData));
       }
     };
