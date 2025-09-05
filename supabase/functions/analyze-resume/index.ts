@@ -186,8 +186,46 @@ function computeExperienceYears(text: string): number {
 async function analyzeWithAI(resumeText: string, fileName?: string, experienceYearsHint?: number): Promise<AnalyzeResult> {
   if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not configured");
 
-  const sys = `You are an expert resume analyzer in 2025. Analyze resumes across ALL industries and seniority levels. Be factual and only use information present in the text.`;
-  const user = `Resume text (sanitized):\n\n${resumeText.slice(0, 120_000)}\n\nInstructions:\n- Detect the most accurate job role/title (e.g., VP Sales, Director Operations, Business Analyst, Marketing Manager, Financial Analyst, Legal Counsel, UX Designer, Software Engineer).\n- Extract ONLY domain-specific, technical, and hard skills explicitly mentioned (tools, platforms, methodologies, frameworks). DO NOT include soft skills (e.g., communication, teamwork).\n- Compute years of experience based on actual employment dates in the resume. If unclear, use this hint: ${experienceYearsHint ?? 0}.\n- Provide a concise 5-line professional summary focused on achievements and domain expertise (no fluff).\n- Consider these categories when relevant: Executive Leadership; Business & Operations; Sales & BD; Marketing & Brand; Customer Experience; Finance & Accounting; Creative & Design; Legal & Compliance; Healthcare & Education; Technology.\n- If seniority is high (Director/VP/C-level), expected ATS score is higher (80-95).\n\nReturn ONLY valid JSON with this exact shape:\n{\n  "job_role": string,\n  "experience_years": number,\n  "skills": string[],\n  "summary": [string, string, string, string, string],\n  "ats_score": number,\n  "recommendations": string[],\n  "missing_skills": string[],\n  "strength_areas": string[]\n}`;
+  const sys = `You are an expert resume analyzer in 2025. Analyze resumes across ALL industries and seniority levels (Executive, Director, Manager, Senior, Entry-level). Be factual and contextually accurate - only use information explicitly present in the resume text.
+
+CRITICAL INSTRUCTIONS:
+- Extract ONLY hard/technical skills explicitly mentioned: tools, software, platforms, frameworks, methodologies, certifications, languages, technical competencies
+- NEVER include soft skills: communication, teamwork, leadership, problem-solving, time management, etc.
+- Detect precise job roles: VP Sales, Director Operations, Business Analyst, Marketing Manager, Financial Analyst, Legal Counsel, UX Designer, Software Engineer, Product Manager, etc.
+- For executives/directors: highlight strategic achievements, revenue impact, team size, market expansion
+- For technical roles: focus on technologies, programming languages, frameworks, system architectures
+- For business roles: emphasize metrics, process improvements, stakeholder management, analysis tools
+- Generate contextually relevant 5-line summaries that reflect actual career progression and achievements`;
+
+  const user = `Resume text (sanitized):\n\n${resumeText.slice(0, 120_000)}\n\nAnalyze this resume and provide:
+
+1. PRIMARY JOB ROLE: Most accurate current/target role based on experience pattern
+2. HARD SKILLS ONLY: Technical tools, software, platforms, methodologies explicitly mentioned (NO soft skills)
+3. EXPERIENCE CALCULATION: Based on employment dates shown (hint if unclear: ${experienceYearsHint ?? 0} years)
+4. PROFESSIONAL SUMMARY: 5 lines highlighting measurable achievements, technical expertise, and career progression
+5. ATS OPTIMIZATION: Score based on role clarity, keyword density, format quality
+6. ROLE-SPECIFIC RECOMMENDATIONS: Relevant to the detected career path
+
+INDUSTRY CONTEXTS:
+- Executive Leadership: Revenue growth, market expansion, strategic initiatives, M&A, P&L management
+- Technology: Programming languages, frameworks, cloud platforms, methodologies, architectures
+- Sales & Business Development: CRM systems, sales methodologies, revenue targets, territory management
+- Marketing & Brand: Marketing automation, analytics tools, campaign management, brand strategy
+- Finance & Accounting: Financial software, regulatory compliance, analysis tools, reporting systems
+- Legal & Compliance: Legal research tools, regulatory frameworks, contract management
+- Healthcare & Education: Specialized certifications, industry-specific tools and protocols
+
+Return ONLY valid JSON with this exact structure:
+{
+  "job_role": "string (specific title like 'Senior Product Manager' not generic 'Professional')",
+  "experience_years": number,
+  "skills": ["specific hard skills only"],
+  "summary": ["achievement-focused line 1", "technical expertise line 2", "career progression line 3", "measurable impact line 4", "role-specific competency line 5"],
+  "ats_score": number (50-95 based on role clarity, keyword optimization, format quality),
+  "recommendations": ["specific actionable improvements for this role/industry"],
+  "missing_skills": ["relevant skills not found but valuable for this role"],
+  "strength_areas": ["key competencies based on experience pattern"]
+}`;
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -197,8 +235,12 @@ async function analyzeWithAI(resumeText: string, fileName?: string, experienceYe
     },
     body: JSON.stringify({
       model: "gpt-4o-mini",
-      temperature: 0.2,
-      messages: [ { role: "system", content: sys }, { role: "user", content: user } ],
+      temperature: 0.1,
+      max_tokens: 2000,
+      messages: [
+        { role: "system", content: sys },
+        { role: "user", content: user }
+      ],
     }),
   });
 

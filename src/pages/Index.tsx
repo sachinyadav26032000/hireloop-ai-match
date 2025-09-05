@@ -164,37 +164,90 @@ const Index = () => {
           </Card>
         </div>
 
-        {/* Features Section */}
-        <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-900 mb-8">Why Choose Hireloop?</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="text-center">
-              <div className="mx-auto mb-4 p-3 bg-blue-100 rounded-full w-fit">
-                <Briefcase className="h-6 w-6 text-blue-600" />
+        {/* Our Services Section */}
+        <div className="bg-gray-900 text-white rounded-2xl p-12 mb-16">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-bold mb-4">Our Services</h2>
+            <p className="text-xl text-gray-300">Comprehensive hiring solutions powered by AI</p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="bg-gray-800 rounded-xl p-6 hover:bg-gray-700 transition-colors">
+              <div className="mb-4 p-3 bg-blue-500 rounded-full w-fit">
+                <Briefcase className="h-8 w-8 text-white" />
               </div>
-              <h3 className="font-semibold mb-2">AI-Powered Analysis</h3>
-              <p className="text-sm text-gray-600">Get instant ATS scores and skill extraction from your resume</p>
+              <h3 className="text-xl font-semibold mb-3">ATS Optimization</h3>
+              <p className="text-gray-300 mb-4">Advanced resume scanning with AI-powered ATS score analysis to improve your job application success rate.</p>
+              <ul className="text-sm text-gray-400 space-y-1">
+                <li>• Real-time ATS scoring</li>
+                <li>• Keyword optimization</li>
+                <li>• Format compliance check</li>
+              </ul>
             </div>
-            <div className="text-center">
-              <div className="mx-auto mb-4 p-3 bg-green-100 rounded-full w-fit">
-                <Users className="h-6 w-6 text-green-600" />
+
+            <div className="bg-gray-800 rounded-xl p-6 hover:bg-gray-700 transition-colors">
+              <div className="mb-4 p-3 bg-green-500 rounded-full w-fit">
+                <Users className="h-8 w-8 text-white" />
               </div>
-              <h3 className="font-semibold mb-2">Smart Matching</h3>
-              <p className="text-sm text-gray-600">Connect with jobs that match your skills and experience</p>
+              <h3 className="text-xl font-semibold mb-3">Resume Parsing & Skills Extraction</h3>
+              <p className="text-gray-300 mb-4">Intelligent extraction of skills, experience, and qualifications from any resume format.</p>
+              <ul className="text-sm text-gray-400 space-y-1">
+                <li>• PDF/DOCX support</li>
+                <li>• Technical skill detection</li>
+                <li>• Experience calculation</li>
+              </ul>
             </div>
-            <div className="text-center">
-              <div className="mx-auto mb-4 p-3 bg-purple-100 rounded-full w-fit">
-                <Building className="h-6 w-6 text-purple-600" />
+
+            <div className="bg-gray-800 rounded-xl p-6 hover:bg-gray-700 transition-colors">
+              <div className="mb-4 p-3 bg-purple-500 rounded-full w-fit">
+                <Building className="h-8 w-8 text-white" />
               </div>
-              <h3 className="font-semibold mb-2">Easy Application</h3>
-              <p className="text-sm text-gray-600">Apply to multiple jobs with just one click</p>
+              <h3 className="text-xl font-semibold mb-3">Job Matching & Recommendations</h3>
+              <p className="text-gray-300 mb-4">Smart algorithms match candidates with relevant opportunities based on skills and experience.</p>
+              <ul className="text-sm text-gray-400 space-y-1">
+                <li>• AI-powered matching</li>
+                <li>• Personalized recommendations</li>
+                <li>• Skill gap analysis</li>
+              </ul>
             </div>
-            <div className="text-center">
-              <div className="mx-auto mb-4 p-3 bg-orange-100 rounded-full w-fit">
-                <ArrowRight className="h-6 w-6 text-orange-600" />
+
+            <div className="bg-gray-800 rounded-xl p-6 hover:bg-gray-700 transition-colors">
+              <div className="mb-4 p-3 bg-orange-500 rounded-full w-fit">
+                <ArrowRight className="h-8 w-8 text-white" />
               </div>
-              <h3 className="font-semibold mb-2">Real-Time Updates</h3>
-              <p className="text-sm text-gray-600">Track your application status in real-time</p>
+              <h3 className="text-xl font-semibold mb-3">Interview Scheduling</h3>
+              <p className="text-gray-300 mb-4">Streamlined interview coordination with automated scheduling and candidate management.</p>
+              <ul className="text-sm text-gray-400 space-y-1">
+                <li>• Automated scheduling</li>
+                <li>• Calendar integration</li>
+                <li>• Interview reminders</li>
+              </ul>
+            </div>
+
+            <div className="bg-gray-800 rounded-xl p-6 hover:bg-gray-700 transition-colors">
+              <div className="mb-4 p-3 bg-indigo-500 rounded-full w-fit">
+                <Users className="h-8 w-8 text-white" />
+              </div>
+              <h3 className="text-xl font-semibold mb-3">Candidate Management</h3>
+              <p className="text-gray-300 mb-4">Comprehensive dashboard for tracking applications, candidate progress, and hiring analytics.</p>
+              <ul className="text-sm text-gray-400 space-y-1">
+                <li>• Application tracking</li>
+                <li>• Candidate profiles</li>
+                <li>• Hiring analytics</li>
+              </ul>
+            </div>
+
+            <div className="bg-gray-800 rounded-xl p-6 hover:bg-gray-700 transition-colors">
+              <div className="mb-4 p-3 bg-teal-500 rounded-full w-fit">
+                <Briefcase className="h-8 w-8 text-white" />
+              </div>
+              <h3 className="text-xl font-semibold mb-3">Real-Time Collaboration</h3>
+              <p className="text-gray-300 mb-4">Enable seamless collaboration between HR teams, candidates, and hiring managers.</p>
+              <ul className="text-sm text-gray-400 space-y-1">
+                <li>• Team collaboration tools</li>
+                <li>• Real-time updates</li>
+                <li>• Notification system</li>
+              </ul>
             </div>
           </div>
         </div>
