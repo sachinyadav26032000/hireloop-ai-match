@@ -26,7 +26,6 @@ interface Job {
 interface Candidate {
   id: string;
   full_name: string;
-  email: string;
   bio: string;
   location: string;
   resumes: Array<{
@@ -78,8 +77,10 @@ const HRDashboard = () => {
 
   const fetchCandidates = async () => {
     try {
+      // Use public_profiles view to get candidate data without emails
+      // HR can still see emails of candidates who applied to their jobs via RLS policies
       const { data, error } = await supabase
-        .from('profiles')
+        .from('public_profiles')
         .select(`
           *,
           resumes (
@@ -147,7 +148,6 @@ const HRDashboard = () => {
 
   const filteredCandidates = candidates.filter(candidate =>
     candidate.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    candidate.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     candidate.bio?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     candidate.resumes?.some(resume =>
       resume.job_role?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -351,7 +351,7 @@ const HRDashboard = () => {
                             </Badge>
                           )}
                         </div>
-                        <p className="text-sm text-gray-600 mb-2">{candidate.email}</p>
+                        {/* Email hidden for privacy - only visible for actual applicants */}
                         {candidate.location && (
                           <div className="flex items-center text-sm text-gray-500 mb-2">
                             <MapPin className="h-4 w-4 mr-1" />
