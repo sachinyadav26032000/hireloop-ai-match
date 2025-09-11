@@ -570,7 +570,7 @@ const JobSeekerDashboard = () => {
                            <Badge className="badge-gradient text-base px-4 py-2">
                              {resume.job_role}
                            </Badge>
-                           {resume.experience_years && (
+                           {resume.experience_years > 0 && (
                              <span className="ml-3 text-gray-600 text-lg flex items-center">
                                <Star className="h-4 w-4 mr-1 text-yellow-500" />
                                {resume.experience_years} years experience

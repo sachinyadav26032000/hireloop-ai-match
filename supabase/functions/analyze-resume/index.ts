@@ -26,6 +26,7 @@ interface AnalyzeRequest {
   bucket?: string; // default: "resumes"
   fileUrl?: string; // legacy/public URL (we will parse & use admin download)
   fileName?: string; // optional hint
+  userId?: string; // optional - used for profile enrichment
 }
 
 interface AnalyzeResult {
@@ -282,6 +283,55 @@ Return ONLY valid JSON with this exact structure:
   if (typeof parsed.ats_score !== "number" || !isFinite(parsed.ats_score)) parsed.ats_score = Math.min(95, Math.max(50, 60 + Math.round((parsed.experience_years || 0) * 2)));
   parsed.job_role = `${parsed.job_role || "Professional"}`.trim();
 
+  // Heuristic enhancements to avoid generic results
+  const heuristicRole = (() => {
+    try {
+      const t = resumeText;
+      const patterns: RegExp[] = [
+        /(chief\s+(?:executive|operating|technology|financial|marketing)\s+officer|\bceo\b|\bcoo\b|\bcto\b|\bcfo\b)/i,
+        /(vice\s+president|\bvp\b)/i,
+        /(director[^,\n]{0,60}(sales|marketing|product|operations|engineering|client acquisition|business development))/i,
+        /((senior|sr\.)\s+)?(manager|lead|head)[^,\n]{0,60}(sales|marketing|product|operations|engineering|client acquisition|business development)/i,
+        /(client acquisition|business development|enterprise sales)[^,\n]{0,40}(director|manager|lead)?/i,
+        /(sales\s+director|director\s+of\s+sales)/i,
+      ];
+      for (const p of patterns) {
+        const m = t.match(p);
+        if (m) return m[0].replace(/\s+/g, ' ').replace(/\b(sr)\b/i, 'Senior').trim();
+      }
+      // Fallback: look for 'Professional Summary' heading area
+      const header = t.split(/\n+/).slice(0, 50).join(' ');
+      const hm = header.match(/(?:title|role|position)\s*[:\-]\s*([^\n,]{3,60})/i);
+      if (hm) return hm[1].trim();
+      return 'Professional';
+    } catch {
+      return 'Professional';
+    }
+  })();
+
+  if (!parsed.job_role || /professional/i.test(parsed.job_role)) {
+    parsed.job_role = heuristicRole;
+  }
+
+  // Compute ATS score more dynamically
+  const seniorityBoost = /(chief|\bvp\b|vice\s+president|director|head|lead)/i.test(resumeText) ? 5 : 0;
+  const impliedSkillsCount = parsed.skills?.length || (resumeText.match(/\b(Python|Salesforce|Excel|SQL|AWS|Azure|GCP|Tableau|HubSpot|Figma|React|Node|TypeScript|Java|C\+\+|Kubernetes|Docker)\b/gi)?.length || 0);
+  let ats = Math.round(
+    Math.min(95, Math.max(50, 60 + ((parsed.experience_years || experienceYearsHint || 0) * 2) + seniorityBoost + Math.min(10, Math.floor(impliedSkillsCount / 3)) ))
+  );
+  parsed.ats_score = ats;
+
+  // Ensure exactly 5 summary lines
+  if (!parsed.summary || parsed.summary.length < 3) {
+    parsed.summary = [
+      `${parsed.job_role}: key achievements and impact across roles`,
+      `Experience: ${(parsed.experience_years || experienceYearsHint || 0)}+ years with domain expertise`,
+      `Tools/Tech: ${(parsed.skills || []).slice(0, 6).join(', ')}`,
+      `Leadership & results: metrics-driven outcomes where applicable`,
+      `Optimization: systems/process improvements and stakeholder value`,
+    ];
+  }
+
   return parsed;
 }
 
@@ -297,7 +347,7 @@ serve(async (req) => {
   try {
     const body: AnalyzeRequest = await req.json();
     const bucket = body.bucket || "resumes";
-    const { storagePath, fileUrl, fileName } = body;
+    const { storagePath, fileUrl, fileName, userId } = body;
 
     console.log("Analyze request", { storagePath, bucket, hasUrl: Boolean(fileUrl), fileName });
 
@@ -333,6 +383,19 @@ serve(async (req) => {
 
     // AI analysis
     const analysis = await analyzeWithAI(text, finalFileName, experienceYears);
+
+    // Optional profile enrichment: set bio to first summary line if empty
+    if (supabaseAdmin && userId) {
+      try {
+        await supabaseAdmin
+          .from('profiles')
+          .update({ bio: (analysis.summary && analysis.summary[0]) || analysis.job_role || null, updated_at: new Date().toISOString() })
+          .eq('id', userId)
+          .is('bio', null);
+      } catch (e) {
+        console.log('Profile update skipped', e);
+      }
+    }
 
     payload = { ok: true, ...analysis };
   } catch (e: any) {
