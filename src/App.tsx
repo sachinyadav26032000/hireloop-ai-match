@@ -11,7 +11,8 @@ import Register from "./pages/auth/Register";
 import JobSeekerDashboard from "./pages/dashboard/JobSeekerDashboard";
 import CompanyDashboard from "./pages/dashboard/CompanyDashboard";
 import HRDashboard from "./pages/dashboard/HRDashboard";
-import Jobs from "./pages/Jobs";
+import OurServices from "./pages/OurServices";
+import ForEmployers from "./pages/ForEmployers";
 import JobDetails from "./pages/JobDetails";
 import NotFound from "./pages/NotFound";
 
@@ -52,7 +53,8 @@ const App = () => (
                 </ProtectedRoute>
               } 
             />
-            <Route path="/jobs" element={<Jobs />} />
+            <Route path="/our-services" element={<OurServices />} />
+            <Route path="/for-employers" element={<ForEmployers />} />
             <Route path="/jobs/:id" element={<JobDetails />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

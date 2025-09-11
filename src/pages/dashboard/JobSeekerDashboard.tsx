@@ -251,7 +251,8 @@ const JobSeekerDashboard = () => {
         .invoke('analyze-resume', {
           body: { 
             fileUrl: urlData.publicUrl,
-            fileName: file.name 
+            fileName: file.name,
+            userId: user.id
           }
         });
 
@@ -626,9 +627,9 @@ const JobSeekerDashboard = () => {
                              animate={{ opacity: 1, scale: 1 }}
                              transition={{ delay: index * 0.05 }}
                            >
-                             <Badge className="skill-tag w-full justify-center">
-                               {skill}
-                             </Badge>
+                              <Badge className="bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-lg w-full justify-center">
+                                {skill}
+                              </Badge>
                            </motion.div>
                          ))}
                        </div>
