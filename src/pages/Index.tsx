@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
-import { Building, Users, Briefcase, ArrowRight, LogIn, UserPlus } from 'lucide-react';
+import { Building, Users, Briefcase, ArrowRight, LogIn, UserPlus, Sparkles, FileText, Linkedin, CheckCircle } from 'lucide-react';
 
 const Index = () => {
   const navigate = useNavigate();
@@ -68,33 +68,71 @@ const Index = () => {
       {/* Hero Section */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="text-center mb-16">
+          <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
+            <Sparkles className="h-4 w-4" />
+            AI-Powered Job Assistant
+          </div>
           <h1 className="text-5xl font-bold text-gray-900 mb-6">
-            Welcome to <span className="text-blue-600">Hireloop</span>
+            From "I need a job" to <span className="text-blue-600">Job-Ready</span>
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            The complete job platform connecting talented job seekers with innovative companies. 
-            Upload your resume, get AI-powered analysis, and find your perfect match.
+            Tell us about yourself in 2-3 sentences. Our AI will create your CV,
+            optimize your LinkedIn, and find jobs that match your skills.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button 
-              size="lg" 
+            <Button
+              size="lg"
+              onClick={() => navigate('/assistant')}
+              className="text-lg px-8 py-6 bg-blue-600 hover:bg-blue-700"
+            >
+              <Sparkles className="h-5 w-5 mr-2" />
+              Start AI Assistant
+              <ArrowRight className="h-5 w-5 ml-2" />
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
               onClick={() => navigate('/jobs')}
-              className="text-lg px-8 py-3"
+              className="text-lg px-8 py-6"
             >
               <Briefcase className="h-5 w-5 mr-2" />
               Browse Jobs
             </Button>
-            {!user && (
-              <Button 
-                size="lg" 
-                variant="outline"
-                onClick={() => navigate('/register')}
-                className="text-lg px-8 py-3"
-              >
-                Get Started Free
-                <ArrowRight className="h-5 w-5 ml-2" />
-              </Button>
-            )}
+          </div>
+        </div>
+
+        {/* How It Works */}
+        <div className="mb-16">
+          <h2 className="text-2xl font-bold text-center mb-8">How It Works</h2>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="text-center">
+              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-blue-600 font-bold">1</span>
+              </div>
+              <h3 className="font-semibold mb-2">Tell Us About You</h3>
+              <p className="text-sm text-gray-600">Write a few sentences about your background and goals</p>
+            </div>
+            <div className="text-center">
+              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-blue-600 font-bold">2</span>
+              </div>
+              <h3 className="font-semibold mb-2">AI Analysis</h3>
+              <p className="text-sm text-gray-600">We identify your skills, experience level, and ideal roles</p>
+            </div>
+            <div className="text-center">
+              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-blue-600 font-bold">3</span>
+              </div>
+              <h3 className="font-semibold mb-2">Get Your CV</h3>
+              <p className="text-sm text-gray-600">Download an ATS-optimized CV ready to use</p>
+            </div>
+            <div className="text-center">
+              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-blue-600 font-bold">4</span>
+              </div>
+              <h3 className="font-semibold mb-2">Apply to Jobs</h3>
+              <p className="text-sm text-gray-600">See matched jobs with explanations for why they fit</p>
+            </div>
           </div>
         </div>
 
@@ -170,7 +208,7 @@ const Index = () => {
             <h2 className="text-4xl font-bold mb-4">Our Services</h2>
             <p className="text-xl text-gray-300">Comprehensive hiring solutions powered by AI</p>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             <div className="bg-gray-800 rounded-xl p-6 hover:bg-gray-700 transition-colors">
               <div className="mb-4 p-3 bg-blue-500 rounded-full w-fit">
@@ -250,6 +288,28 @@ const Index = () => {
               </ul>
             </div>
           </div>
+        </div>
+
+        {/* CTA Section */}
+        <div className="mt-16 text-center">
+          <Card className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-0">
+            <CardContent className="py-12">
+              <h2 className="text-3xl font-bold mb-4">Ready to Get Started?</h2>
+              <p className="text-lg text-blue-100 mb-6 max-w-2xl mx-auto">
+                No account required. Just tell us about yourself and get your CV, LinkedIn tips, and job matches in minutes.
+              </p>
+              <Button
+                size="lg"
+                variant="secondary"
+                onClick={() => navigate('/assistant')}
+                className="text-lg px-8 py-6"
+              >
+                <Sparkles className="h-5 w-5 mr-2" />
+                Launch AI Assistant
+                <ArrowRight className="h-5 w-5 ml-2" />
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
