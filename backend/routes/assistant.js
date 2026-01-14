@@ -1,6 +1,7 @@
 /**
  * AI Assistant Routes
  * Unified endpoints for the complete job assistant flow
+ * With recruiter-grade validation
  */
 import express from "express";
 import { analyzeProfile } from "../services/profileAnalysisService.js";
@@ -8,20 +9,56 @@ import { generateCV, cvToHTML } from "../services/cvGenerationService.js";
 import { optimizeLinkedIn } from "../services/linkedinOptimizationService.js";
 import { matchJobs, getMockJobs } from "../services/jobMatchingService.js";
 import { isMockMode } from "../services/aiAdapter.js";
+import {
+  validateProfileInput,
+  validateResume,
+  validateSelfDescription,
+  formatValidationErrors,
+} from "../lib/validation.js";
 
 const router = express.Router();
 
 /**
  * Step 1: Analyze user profile
  * POST /assistant/analyze
+ *
+ * STRICT VALIDATION: All fields must be valid before analysis begins.
+ * Resume is MANDATORY - we cannot provide meaningful analysis without it.
  */
 router.post("/analyze", async (req, res) => {
   try {
-    const { selfDescription, resumeText, linkedinText, desiredRole, locations } = req.body;
+    const {
+      selfDescription,
+      resumeText,
+      linkedinText,
+      linkedinUrl,
+      desiredRole,
+      desiredRoles,
+      location,
+      locations,
+      fullName,
+      email,
+      totalExperience,
+      selectedSkills,
+    } = req.body;
 
-    if (!selfDescription || selfDescription.trim().length < 10) {
+    // Comprehensive validation
+    const validationResult = validateProfileInput({
+      fullName,
+      email,
+      selfDescription,
+      resumeText,
+      desiredRoles: desiredRoles || (desiredRole ? [desiredRole] : []),
+      location: location || (locations && locations[0]) || '',
+      totalExperience,
+      linkedinUrl,
+      selectedSkills,
+    });
+
+    if (!validationResult.valid) {
       return res.status(400).json({
-        error: "Please provide a self-description (at least 10 characters)",
+        success: false,
+        ...formatValidationErrors(validationResult.errors),
       });
     }
 
@@ -29,8 +66,12 @@ router.post("/analyze", async (req, res) => {
       selfDescription,
       resumeText,
       linkedinText,
-      desiredRole,
-      locations,
+      desiredRole: desiredRoles || desiredRole,
+      locations: locations || [location],
+      fullName,
+      email,
+      totalExperience,
+      selectedSkills,
     });
 
     res.json({
@@ -40,7 +81,11 @@ router.post("/analyze", async (req, res) => {
     });
   } catch (error) {
     console.error("[Assistant] Analyze error:", error);
-    res.status(500).json({ error: "Profile analysis failed" });
+    res.status(500).json({
+      success: false,
+      error: "Profile analysis failed",
+      message: error.message,
+    });
   }
 });
 
@@ -54,7 +99,17 @@ router.post("/generate-cv", async (req, res) => {
 
     if (!profileAnalysis) {
       return res.status(400).json({
+        success: false,
         error: "Profile analysis is required. Please complete step 1 first.",
+      });
+    }
+
+    // Validate that we have resume content
+    const resumeValidation = validateResume(existingResume);
+    if (!resumeValidation.valid) {
+      return res.status(400).json({
+        success: false,
+        error: resumeValidation.error,
       });
     }
 
@@ -71,7 +126,11 @@ router.post("/generate-cv", async (req, res) => {
     });
   } catch (error) {
     console.error("[Assistant] CV generation error:", error);
-    res.status(500).json({ error: "CV generation failed" });
+    res.status(500).json({
+      success: false,
+      error: "CV generation failed",
+      message: error.message,
+    });
   }
 });
 
@@ -84,7 +143,17 @@ router.post("/download-cv", async (req, res) => {
     const { cvData } = req.body;
 
     if (!cvData) {
-      return res.status(400).json({ error: "CV data is required" });
+      return res.status(400).json({
+        success: false,
+        error: "CV data is required",
+      });
+    }
+
+    if (!cvData.fullName || !cvData.summary) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid CV data. Please regenerate your CV.",
+      });
     }
 
     const html = cvToHTML(cvData);
@@ -94,7 +163,11 @@ router.post("/download-cv", async (req, res) => {
     res.send(html);
   } catch (error) {
     console.error("[Assistant] CV download error:", error);
-    res.status(500).json({ error: "CV download failed" });
+    res.status(500).json({
+      success: false,
+      error: "CV download failed",
+      message: error.message,
+    });
   }
 });
 
@@ -108,6 +181,7 @@ router.post("/optimize-linkedin", async (req, res) => {
 
     if (!profileAnalysis) {
       return res.status(400).json({
+        success: false,
         error: "Profile analysis is required. Please complete step 1 first.",
       });
     }
@@ -125,7 +199,11 @@ router.post("/optimize-linkedin", async (req, res) => {
     });
   } catch (error) {
     console.error("[Assistant] LinkedIn optimization error:", error);
-    res.status(500).json({ error: "LinkedIn optimization failed" });
+    res.status(500).json({
+      success: false,
+      error: "LinkedIn optimization failed",
+      message: error.message,
+    });
   }
 });
 
@@ -135,10 +213,11 @@ router.post("/optimize-linkedin", async (req, res) => {
  */
 router.post("/match-jobs", async (req, res) => {
   try {
-    const { profileAnalysis, cvData, availableJobs } = req.body;
+    const { profileAnalysis, cvData, availableJobs, filters } = req.body;
 
     if (!profileAnalysis) {
       return res.status(400).json({
+        success: false,
         error: "Profile analysis is required. Please complete step 1 first.",
       });
     }
@@ -147,30 +226,67 @@ router.post("/match-jobs", async (req, res) => {
       profileAnalysis,
       cvData,
       availableJobs,
+      filters,
     });
 
     res.json({
       success: true,
       data: jobMatches,
       mockMode: isMockMode(),
+      notice: "Job listings are for demonstration purposes. Click external links to find real opportunities.",
     });
   } catch (error) {
     console.error("[Assistant] Job matching error:", error);
-    res.status(500).json({ error: "Job matching failed" });
+    res.status(500).json({
+      success: false,
+      error: "Job matching failed",
+      message: error.message,
+    });
   }
 });
 
 /**
  * Complete flow: Run all steps at once
  * POST /assistant/complete-flow
+ *
+ * STRICT VALIDATION: All inputs validated before any processing begins.
  */
 router.post("/complete-flow", async (req, res) => {
   try {
-    const { selfDescription, resumeText, linkedinText, desiredRole, locations, userInfo, currentLinkedin } = req.body;
+    const {
+      selfDescription,
+      resumeText,
+      linkedinText,
+      linkedinUrl,
+      desiredRole,
+      desiredRoles,
+      location,
+      locations,
+      userInfo,
+      currentLinkedin,
+      fullName,
+      email,
+      totalExperience,
+      selectedSkills,
+    } = req.body;
 
-    if (!selfDescription || selfDescription.trim().length < 10) {
+    // Comprehensive validation
+    const validationResult = validateProfileInput({
+      fullName: fullName || (userInfo && userInfo.name),
+      email: email || (userInfo && userInfo.email),
+      selfDescription,
+      resumeText,
+      desiredRoles: desiredRoles || (desiredRole ? [desiredRole] : []),
+      location: location || (locations && locations[0]) || '',
+      totalExperience,
+      linkedinUrl,
+      selectedSkills,
+    });
+
+    if (!validationResult.valid) {
       return res.status(400).json({
-        error: "Please provide a self-description (at least 10 characters)",
+        success: false,
+        ...formatValidationErrors(validationResult.errors),
       });
     }
 
@@ -179,14 +295,18 @@ router.post("/complete-flow", async (req, res) => {
       selfDescription,
       resumeText,
       linkedinText,
-      desiredRole,
-      locations,
+      desiredRole: desiredRoles || desiredRole,
+      locations: locations || [location],
+      fullName,
+      email,
+      totalExperience,
+      selectedSkills,
     });
 
     // Step 2: Generate CV
     const cvData = await generateCV({
       profileAnalysis,
-      userInfo: { ...userInfo, selfDescription },
+      userInfo: { ...userInfo, selfDescription, name: fullName, email },
       existingResume: resumeText,
     });
 
@@ -194,7 +314,7 @@ router.post("/complete-flow", async (req, res) => {
     const linkedinOptimization = await optimizeLinkedIn({
       profileAnalysis,
       currentLinkedin,
-      userInfo,
+      userInfo: { ...userInfo, name: fullName, email },
     });
 
     // Step 4: Match jobs
@@ -216,7 +336,11 @@ router.post("/complete-flow", async (req, res) => {
     });
   } catch (error) {
     console.error("[Assistant] Complete flow error:", error);
-    res.status(500).json({ error: "Assistant flow failed" });
+    res.status(500).json({
+      success: false,
+      error: "Assistant flow failed",
+      message: error.message,
+    });
   }
 });
 
@@ -228,6 +352,7 @@ router.get("/jobs", (req, res) => {
   res.json({
     success: true,
     data: getMockJobs(),
+    notice: "These are demonstration job listings. Use the external links provided with each job to find real opportunities.",
   });
 });
 
@@ -240,6 +365,7 @@ router.get("/health", (req, res) => {
     status: "ok",
     mockMode: isMockMode(),
     services: ["profileAnalysis", "cvGeneration", "linkedinOptimization", "jobMatching"],
+    validation: "strict",
   });
 });
 
