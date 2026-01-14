@@ -352,7 +352,7 @@ export default function Assistant() {
   const missingRequirements = useMemo(() => getMissingRequirements(), [getMissingRequirements]);
 
   // Real-time field validation (only show errors after field is touched)
-  // LinkedIn is OPTIONAL - its validation failures go to warnings, not errors
+  // OPTIONAL fields (linkedinUrl, selfDescription) use warnings, not errors
   const validateField = useCallback((field: string, value: string | string[]) => {
     let result;
     switch (field) {
@@ -387,34 +387,35 @@ export default function Assistant() {
         return;
     }
 
-    // LinkedIn is OPTIONAL - put validation failures in warnings, not errors
-    // This ensures invalid LinkedIn URLs don't block form submission
-    if (field === 'linkedinUrl') {
-      // Clear any existing error for LinkedIn (it should never block)
+    // OPTIONAL FIELDS: linkedinUrl, selfDescription
+    // These use warnings instead of errors - they NEVER block form submission
+    const optionalFields = ['linkedinUrl', 'selfDescription'];
+    if (optionalFields.includes(field)) {
+      // Clear any existing error for optional fields (they should never block)
       setErrors(prev => {
         const newErrors = { ...prev };
-        delete newErrors['linkedinUrl'];
+        delete newErrors[field];
         return newErrors;
       });
-      // Handle LinkedIn as warning
+      // Handle as warning
       if (result.valid) {
         if (result.warning) {
-          setWarnings(prev => ({ ...prev, linkedinUrl: result.warning! }));
+          setWarnings(prev => ({ ...prev, [field]: result.warning! }));
         } else {
           setWarnings(prev => {
             const newWarnings = { ...prev };
-            delete newWarnings['linkedinUrl'];
+            delete newWarnings[field];
             return newWarnings;
           });
         }
       } else if (touched[field]) {
-        // Invalid LinkedIn goes to warnings, not errors
-        setWarnings(prev => ({ ...prev, linkedinUrl: result.error! }));
+        // Invalid optional field goes to warnings, not errors
+        setWarnings(prev => ({ ...prev, [field]: result.error! }));
       }
       return;
     }
 
-    // For all other fields (required fields), use errors
+    // REQUIRED FIELDS: use errors (these block form submission)
     setErrors(prev => {
       const newErrors = { ...prev };
       if (result.valid) {
@@ -425,7 +426,7 @@ export default function Assistant() {
       return newErrors;
     });
 
-    // Handle warnings
+    // Handle warnings for required fields
     if (result.warning) {
       setWarnings(prev => ({ ...prev, [field]: result.warning! }));
     } else {
@@ -443,6 +444,7 @@ export default function Assistant() {
   };
 
   // Validate all fields before submission
+  // Returns true if form can proceed (only required fields block submission)
   const validateAllFields = (): boolean => {
     const result = fullFormValidation;
 
@@ -453,6 +455,8 @@ export default function Assistant() {
     });
     setTouched(prev => ({ ...prev, ...allTouched }));
 
+    // IMPORTANT: Clear ALL previous errors before setting new ones
+    // This prevents stale errors from blocking submission
     setErrors(result.errors);
     setWarnings(result.warnings);
 
@@ -951,7 +955,7 @@ export default function Assistant() {
                     description="Optional but recommended for better optimization"
                   />
                   <div className="space-y-4 pl-11">
-                    {/* About You */}
+                    {/* About You - OPTIONAL field, validation issues shown as warnings */}
                     <div className="space-y-2">
                       <Label htmlFor="self">About You (Optional)</Label>
                       <Textarea
@@ -964,14 +968,12 @@ export default function Assistant() {
                         }}
                         onBlur={() => {
                           handleBlur('selfDescription');
-                          if (selfDescription) validateField('selfDescription', selfDescription);
+                          validateField('selfDescription', selfDescription);
                         }}
-                        className={cn(
-                          "min-h-[100px] transition-all duration-200",
-                          errors.selfDescription && touched.selfDescription ? 'border-red-500 focus:ring-red-200' : ''
-                        )}
+                        className="min-h-[100px] transition-all duration-200"
                       />
-                      <FieldError error={touched.selfDescription ? errors.selfDescription : undefined} />
+                      {/* selfDescription uses FieldWarning - invalid input doesn't block submission */}
+                      <FieldWarning warning={touched.selfDescription ? warnings.selfDescription : undefined} />
                     </div>
 
                     {/* LinkedIn - OPTIONAL field, validation issues shown as warnings */}

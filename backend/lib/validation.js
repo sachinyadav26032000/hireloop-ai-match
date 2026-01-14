@@ -363,9 +363,13 @@ export function validateCoreFields(data) {
 /**
  * Comprehensive form validation for profile analysis
  * Includes resume as required for AI analysis
+ * OPTIONAL fields (selfDescription, linkedinUrl) do NOT block submission
  */
 export function validateProfileInput(data) {
   const errors = {};
+  const warnings = {};
+
+  // REQUIRED FIELDS - these block submission
 
   // Full name validation
   const nameResult = validateFullName(data.fullName);
@@ -374,12 +378,6 @@ export function validateProfileInput(data) {
   // Email validation
   const emailResult = validateEmail(data.email);
   if (!emailResult.valid) errors.email = emailResult.error;
-
-  // Self description validation (optional, only validate if provided)
-  if (data.selfDescription) {
-    const descResult = validateSelfDescription(data.selfDescription);
-    if (!descResult.valid) errors.selfDescription = descResult.error;
-  }
 
   // Resume validation - required for AI analysis
   const resumeResult = validateResume(data.resumeText, true);
@@ -397,19 +395,29 @@ export function validateProfileInput(data) {
   const expResult = validateExperience(data.totalExperience);
   if (!expResult.valid) errors.totalExperience = expResult.error;
 
-  // LinkedIn URL validation (optional, only validate if provided)
-  if (data.linkedinUrl) {
-    const linkedinResult = validateLinkedInUrl(data.linkedinUrl);
-    if (!linkedinResult.valid) errors.linkedinUrl = linkedinResult.error;
-  }
-
   // Skills validation (required)
   const skillsResult = validateSkills(data.selectedSkills || []);
   if (!skillsResult.valid) errors.selectedSkills = skillsResult.error;
 
+  // OPTIONAL FIELDS - these go to warnings, NOT errors
+  // They do NOT block form submission
+
+  // Self description validation (optional)
+  if (data.selfDescription) {
+    const descResult = validateSelfDescription(data.selfDescription);
+    if (!descResult.valid) warnings.selfDescription = descResult.error;
+  }
+
+  // LinkedIn URL validation (optional)
+  if (data.linkedinUrl) {
+    const linkedinResult = validateLinkedInUrl(data.linkedinUrl);
+    if (!linkedinResult.valid) warnings.linkedinUrl = linkedinResult.error;
+  }
+
   return {
     valid: Object.keys(errors).length === 0,
-    errors
+    errors,
+    warnings
   };
 }
 
