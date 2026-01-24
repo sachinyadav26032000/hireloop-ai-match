@@ -60,11 +60,13 @@ export interface LinkedInOptimization {
     before: string;
     after: string;
     tips: string[];
+    characteristics?: string[];
   };
   about: {
     before: string;
     after: string;
     tips: string[];
+    characteristics?: string[];
   };
   experienceBullets: {
     role: string;
@@ -77,6 +79,25 @@ export interface LinkedInOptimization {
   skillsToAdd?: string[];
   skillsToRemove?: string[];
   certifications?: string[];
+  // New: Comprehensive Skills Section (10-20 skills)
+  skillsSection?: {
+    skills: string[];
+    count: number;
+    priorityOrder: string;
+    note: string;
+    characteristics?: string[];
+  };
+  // New: Categorized Tips
+  tips?: {
+    keywordOptimization: string[];
+    profileCompleteness: string[];
+    recruiterVisibility: string[];
+  };
+  disclaimer?: string;
+  dataSource?: {
+    basedOn: string[];
+    notUsed: string[];
+  };
 }
 
 export interface JobMatch {
@@ -102,12 +123,42 @@ export interface JobMatch {
   recommendation: string;
 }
 
+export interface JobBoardRecommendation {
+  id: string;
+  name: string;
+  logo: string;
+  description: string;
+  url: string;
+  priority: number;
+  whyRecommended: string;
+}
+
 export interface JobMatchResult {
   matches: JobMatch[];
   overallInsights: {
     strongestFitCategory: string;
     topSkillsInDemand: string[];
     suggestedUpskilling: string[];
+    jobsFound?: number;
+    sourcesUsed?: string[];
+  } | null;
+  error?: string;
+  message?: string;
+  liveJobsUnavailable?: boolean;
+  apiStatus?: {
+    adzunaConfigured: boolean;
+    joobleConfigured: boolean;
+    anyConfigured: boolean;
+  };
+  sources?: string[];
+  // New: Smart job board recommendations when APIs unavailable
+  jobBoardRecommendations?: {
+    searchQuery: string;
+    location: string;
+    experienceLevel: string;
+    boards: JobBoardRecommendation[];
+    tips: string[];
+    note: string;
   };
 }
 
@@ -203,6 +254,44 @@ function formatFieldName(field: string): string {
   return fieldMap[field] || field;
 }
 
+export interface ResumeUploadResult {
+  text: string;
+  wordCount: number;
+  extractedData: {
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    linkedin: string | null;
+    skills: string[];
+    suggestedRoles: string[];
+  };
+}
+
+// Mismatch warning for name/email differences between form and resume
+export interface DataMismatchWarning {
+  field: string;
+  formValue: string;
+  resumeValue: string;
+  message: string;
+}
+
+// Upload response with warnings
+export interface ResumeUploadResponse {
+  success: boolean;
+  data: ResumeUploadResult;
+  message: string;
+  warnings?: DataMismatchWarning[];
+  sessionCleared?: boolean;
+}
+
+// Analysis response with session ID
+export interface AnalysisResponse {
+  success: boolean;
+  data: ProfileAnalysis;
+  sessionId?: string;
+  aiMode: string;
+}
+
 export const assistantApi = {
   /**
    * Check API health
@@ -212,10 +301,32 @@ export const assistantApi = {
   },
 
   /**
+   * Upload and parse resume file
+   * Extracts text, skills, and contact info from PDF/DOCX/TXT files
+   */
+  async uploadResume(file: File): Promise<{ success: boolean; data: ResumeUploadResult; message: string }> {
+    const formData = new FormData();
+    formData.append("resume", file);
+
+    const response = await fetch(`${API_BASE}/assistant/upload-resume`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: "Upload failed" }));
+      throw new Error(errorData.error || errorData.message || "Failed to upload resume");
+    }
+
+    return response.json();
+  },
+
+  /**
    * Analyze user profile (Step 1)
+   * Returns sessionId for tracking
    */
   async analyzeProfile(input: AssistantInput) {
-    return apiCall<{ success: boolean; data: ProfileAnalysis; mockMode: boolean }>("/assistant/analyze", {
+    return apiCall<{ success: boolean; data: ProfileAnalysis; sessionId?: string; aiMode: string }>("/assistant/analyze", {
       method: "POST",
       body: JSON.stringify(input),
     });

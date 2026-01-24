@@ -1,353 +1,377 @@
 /**
- * LinkedIn Optimization Service
- * Provides before/after improvements for LinkedIn profiles
- * Includes skill recommendations and certification suggestions
+ * LinkedIn Optimization Service - AI-POWERED
+ *
+ * Uses GPT to create recruiter-optimized LinkedIn content:
+ * - Personalized headlines that get found in searches
+ * - Compelling About sections that tell your story
+ * - Experience bullets that showcase impact
+ * - SEO-optimized keywords for visibility
+ *
+ * CRITICAL: Only uses provided data - never invents facts.
  */
-import { callAI, parseAIResponse } from "./aiAdapter.js";
+import { callAI, parseAIResponse, isAIAvailable } from "./aiAdapter.js";
 
-const SYSTEM_PROMPT = `You are a LinkedIn optimization expert and recruiter who knows exactly what hiring managers search for.
-Analyze and improve LinkedIn profile sections for maximum recruiter visibility.
+/**
+ * System prompt for LinkedIn headline optimization
+ */
+const HEADLINE_OPTIMIZER_PROMPT = `You are a LinkedIn optimization expert who has helped thousands of professionals increase their profile visibility and land interviews.
 
-Return ONLY valid JSON in this format:
+Your task is to create an OPTIMAL LinkedIn headline for this candidate.
+
+HEADLINE BEST PRACTICES:
+- 120 characters max (LinkedIn truncates beyond this)
+- Front-load with searchable job title
+- Include 2-3 high-demand skills separated by |
+- Add credibility markers (years experience, certifications, notable companies)
+- Use keywords recruiters actually search for
+
+HEADLINE FORMULAS THAT WORK:
+1. [Role] | [Skill] | [Skill] | [Credibility]
+2. [Role] at [Company Type] | [Specialty] | [Result]
+3. Senior [Role] | Helping [audience] achieve [outcome]
+
+Examples:
+- "Senior Software Engineer | React | Node.js | AWS | 8+ Years Building Scalable Systems"
+- "Product Manager | B2B SaaS | Data-Driven Growth | Ex-Google, Ex-Stripe"
+- "Data Scientist | ML/AI | Python | Turning Data Into Business Decisions"
+
+Return ONLY a JSON object:
 {
-  "headline": {
-    "before": "original or empty",
-    "after": "optimized headline with keywords",
-    "tips": ["tip1", "tip2"]
-  },
-  "about": {
-    "before": "original or empty",
-    "after": "optimized about section",
-    "tips": ["tip1", "tip2"]
-  },
-  "experienceBullets": [
-    {
-      "role": "Job Title",
-      "before": ["original bullet"],
-      "after": ["improved bullet with metrics"]
-    }
-  ],
-  "keywords": ["keyword1", "keyword2"],
-  "overallScore": 75,
-  "topRecommendations": ["recommendation1", "recommendation2"],
-  "skillsToAdd": ["skill1", "skill2"],
-  "skillsToRemove": ["outdated skill1"],
-  "certifications": ["certification recommendation 1", "certification recommendation 2"]
+  "headline": "The optimized headline",
+  "reasoning": "Why this headline works for this candidate",
+  "keywords": ["searchable", "keywords", "included"],
+  "alternativeHeadlines": ["Alternative option 1", "Alternative option 2"]
 }`;
 
-// Skills to add by role
-const ROLE_SKILLS_RECOMMENDATIONS = {
-  "Software Engineer": {
-    add: ["System Design", "Code Review", "Agile Methodologies", "CI/CD", "Technical Documentation"],
-    remove: ["Microsoft Office", "Typing"],
-    certifications: [
-      "AWS Certified Developer Associate",
-      "Google Cloud Professional Developer",
-      "Kubernetes Certified Developer (CKAD)"
-    ]
-  },
-  "Frontend Developer": {
-    add: ["React.js", "TypeScript", "Responsive Design", "Web Performance", "Accessibility (a11y)"],
-    remove: ["Flash", "jQuery (unless needed)", "Table-based layouts"],
-    certifications: [
-      "Meta Front-End Developer Certificate",
-      "AWS Certified Cloud Practitioner",
-      "Google UX Design Certificate (for UX understanding)"
-    ]
-  },
-  "Backend Developer": {
-    add: ["API Design", "Database Optimization", "Microservices", "Container Orchestration", "Security Best Practices"],
-    remove: ["COBOL (unless relevant)", "Legacy frameworks"],
-    certifications: [
-      "AWS Certified Solutions Architect",
-      "MongoDB Certified Developer",
-      "Kubernetes Certified Administrator (CKA)"
-    ]
-  },
-  "Data Analyst": {
-    add: ["Python", "SQL", "Data Visualization", "Business Intelligence", "Statistical Analysis"],
-    remove: ["Basic Excel (upgrade to Advanced Excel)", "Manual data entry"],
-    certifications: [
-      "Google Data Analytics Certificate",
-      "Microsoft Power BI Data Analyst",
-      "Tableau Desktop Specialist"
-    ]
-  },
-  "Product Manager": {
-    add: ["Product Strategy", "Roadmapping", "User Research", "A/B Testing", "Stakeholder Management"],
-    remove: ["Generic project management", "Administrative skills"],
-    certifications: [
-      "Product School Product Manager Certificate",
-      "Pragmatic Institute Product Master",
-      "Google Project Management Certificate"
-    ]
-  },
-  "Marketing Manager": {
-    add: ["Performance Marketing", "Google Analytics", "Marketing Automation", "Content Strategy", "SEO/SEM"],
-    remove: ["Traditional advertising (unless relevant)", "Cold calling"],
-    certifications: [
-      "Google Analytics Certification",
-      "HubSpot Inbound Marketing Certification",
-      "Meta Blueprint Certification"
-    ]
-  },
-  "UX Designer": {
-    add: ["User Research", "Figma", "Design Systems", "Usability Testing", "Information Architecture"],
-    remove: ["Photoshop (unless needed)", "Print design skills"],
-    certifications: [
-      "Google UX Design Professional Certificate",
-      "Nielsen Norman UX Certificate",
-      "Interaction Design Foundation Certificate"
-    ]
-  },
-  "Sales Executive": {
-    add: ["Salesforce", "Pipeline Management", "Consultative Selling", "Account Management", "Negotiation"],
-    remove: ["Cold calling (frame as outbound)", "Door-to-door sales"],
-    certifications: [
-      "Salesforce Administrator Certification",
-      "HubSpot Sales Software Certification",
-      "SPIN Selling Certification"
-    ]
-  },
-  "HR Manager": {
-    add: ["HRIS Systems", "Talent Acquisition", "Employee Engagement", "Performance Management", "Employment Law"],
-    remove: ["Filing", "Data entry"],
-    certifications: [
-      "SHRM-CP (Certified Professional)",
-      "PHR (Professional in Human Resources)",
-      "LinkedIn Recruiter Certification"
-    ]
-  },
-  "Business Development": {
-    add: ["Partnership Development", "Lead Generation", "Market Research", "CRM Management", "Strategic Planning"],
-    remove: ["Telemarketing", "Generic sales"],
-    certifications: [
-      "Salesforce Certified Sales Professional",
-      "HubSpot Sales Enablement Certification",
-      "Negotiation from Harvard Business School Online"
-    ]
-  }
-};
+/**
+ * System prompt for LinkedIn About section
+ */
+const ABOUT_SECTION_PROMPT = `You are a professional storyteller and LinkedIn expert who crafts compelling About sections that convert profile views into opportunities.
 
-// Default recommendations for roles not in the map
-const DEFAULT_SKILLS_RECOMMENDATIONS = {
-  add: ["Project Management", "Data Analysis", "Communication", "Strategic Thinking", "Cross-functional Collaboration"],
-  remove: ["Microsoft Word (unless specific)", "Typing speed", "Generic office skills"],
-  certifications: [
-    "Google Project Management Certificate",
-    "LinkedIn Learning Certifications in your field",
-    "Industry-specific certifications from professional associations"
-  ]
-};
+Write a powerful LinkedIn About section for this candidate.
 
-function generateMockLinkedInOptimization(input) {
-  const { profileAnalysis, currentLinkedin, userInfo } = input;
+ABOUT SECTION STRUCTURE (2000-2600 characters optimal):
+
+PARAGRAPH 1 - THE HOOK (2-3 sentences)
+Start with a compelling statement that establishes who they are and their unique value.
+Not "I am a..." but rather lead with impact or passion.
+
+PARAGRAPH 2 - EXPERTISE (bullet points)
+List 6-8 key skills and competencies in bullet format.
+Use • character for bullets.
+These should be searchable keywords.
+
+PARAGRAPH 3 - ACHIEVEMENTS (2-3 bullets)
+Highlight quantified achievements from their experience.
+Use metrics where available.
+Show impact, not responsibilities.
+
+PARAGRAPH 4 - WHAT DRIVES THEM (1-2 sentences)
+Add personality - what excites them about their work.
+This builds connection with readers.
+
+PARAGRAPH 5 - CALL TO ACTION (1-2 sentences)
+What are they looking for?
+How can people connect?
+
+WRITING RULES:
+- Write in first person (I, my, me)
+- Be specific to THIS person - no generic filler
+- Include keywords naturally for SEO
+- Keep paragraphs short for mobile readability
+- Sound confident but authentic, not arrogant
+
+Return ONLY a JSON object:
+{
+  "about": "The complete About section with proper formatting and line breaks",
+  "wordCount": number,
+  "keywordsIncluded": ["list", "of", "keywords"],
+  "structureUsed": "Brief description of the structure"
+}`;
+
+/**
+ * System prompt for comprehensive LinkedIn optimization
+ */
+const LINKEDIN_OPTIMIZER_PROMPT = `You are a LinkedIn profile optimization expert and recruiter who understands exactly what makes profiles stand out and get found.
+
+Provide comprehensive LinkedIn optimization recommendations for this candidate.
+
+Analyze their profile and provide:
+
+1. HEADLINE - Optimized headline (120 chars max)
+2. ABOUT - Compelling About section (2000-2600 chars)
+3. EXPERIENCE TIPS - How to improve their experience section
+4. SKILLS - Which skills to prioritize and add
+5. KEYWORDS - SEO keywords they should include
+6. ACTIONABLE TIPS - Specific improvements they can make today
+
+IMPORTANT:
+- Base everything on the information provided
+- Don't invent achievements or experience
+- Be specific to their role and industry
+- Focus on what recruiters search for
+
+Return ONLY valid JSON:
+{
+  "headline": {
+    "suggested": "The optimized headline",
+    "reasoning": "Why this works",
+    "keywords": ["included", "keywords"]
+  },
+  "about": {
+    "suggested": "The complete About section",
+    "structure": "How it's organized",
+    "keyHighlights": ["Key points included"]
+  },
+  "experienceTips": [
+    {
+      "tip": "Specific tip",
+      "example": "How to apply it",
+      "impact": "Why it matters"
+    }
+  ],
+  "skillsRecommendations": {
+    "topSkillsToFeature": ["Skills to pin to top"],
+    "skillsToAdd": ["Missing skills for their role"],
+    "orderingAdvice": "How to order skills"
+  },
+  "keywordsToInclude": ["searchable", "keywords", "for", "their", "role"],
+  "actionableTips": [
+    "Specific action 1",
+    "Specific action 2",
+    "Specific action 3"
+  ],
+  "overallScore": 0-100,
+  "scoreExplanation": "Why this score"
+}`;
+
+/**
+ * Generate basic optimization without AI
+ */
+function generateBasicOptimization(input) {
+  const { profileAnalysis, userInfo, resumeText } = input;
   const targetRole = profileAnalysis?.suggestedRoles?.[0] || "Professional";
-  const skills = profileAnalysis?.coreSkills || ["Problem Solving", "Communication"];
+  const skills = profileAnalysis?.coreSkills || [];
+  const years = profileAnalysis?.yearsOfExperience || 0;
   const level = profileAnalysis?.experienceLevel || "mid";
-  const name = userInfo?.fullName?.split(" ")[0] || "Professional";
-  const location = userInfo?.location || "";
 
-  // Get role-specific recommendations
-  const roleRecommendations = ROLE_SKILLS_RECOMMENDATIONS[targetRole] || DEFAULT_SKILLS_RECOMMENDATIONS;
+  // Basic headline
+  const topSkills = skills.slice(0, 2);
+  let headline = targetRole;
+  if (topSkills.length > 0) {
+    headline += ` | ${topSkills.join(" | ")}`;
+  }
+  if (years > 0) {
+    headline += ` | ${years}+ Years`;
+  }
 
-  const levelTitles = {
-    entry: `${targetRole} | ${skills[0]} | ${skills[1] || "Building Great Products"} | Open to Opportunities`,
-    junior: `${targetRole} at [Company] | ${skills.slice(0, 2).join(" • ")} | Helping teams ship faster`,
-    mid: `Senior ${targetRole} | ${skills[0]} • ${skills[1] || "Leadership"} | Driving Results That Matter`,
-    senior: `Staff ${targetRole} | ${skills[0]} Expert | Technical Leader | Previously @[Company]`,
-    lead: `Principal ${targetRole} | ${skills[0]} Architect | Building Teams & Systems at Scale`
-  };
-
-  const levelAbout = {
-    entry: `Early-career ${targetRole} passionate about ${skills[0]} and building products that matter.
-
-Currently focused on:
-• Developing expertise in ${skills.slice(0, 3).join(", ")}
-• Building a strong foundation in ${profileAnalysis?.industryFit?.[0] || "technology"}
-• Collaborating with cross-functional teams to deliver results
-
-What I bring:
-${skills.slice(0, 3).map(s => `✓ ${s}`).join("\n")}
-
-I'm actively looking for opportunities where I can contribute, learn, and grow. If you're building something interesting, let's connect.
-
-📩 Best way to reach me: [Email]`,
-
-    junior: `${targetRole} with ${profileAnalysis?.yearsOfExperience || 2}+ years of hands-on experience building products that users love.
-
-What I do:
-I specialize in ${skills.slice(0, 3).join(", ")}, with a track record of delivering projects that drive business impact.
-
-Recent wins:
-• Delivered features that improved user engagement by 20%+
-• Collaborated with product and design to ship 10+ successful releases
-• Mentored junior team members on best practices
-
-Core strengths:
-${skills.slice(0, 4).map(s => `• ${s}`).join("\n")}
-
-Currently exploring opportunities in ${location ? location : "growth-stage companies"} where I can make a meaningful impact.
-
-Let's connect: [Email]`,
-
-    mid: `Results-driven ${targetRole} with ${profileAnalysis?.yearsOfExperience || 5}+ years leading technical initiatives and delivering measurable business outcomes.
-
-My focus areas:
-${skills.slice(0, 4).map(s => `◆ ${s}`).join("\n")}
-
-Career highlights:
-→ Led team of 5+ on product launches generating $1M+ revenue
-→ Improved system performance by 40%, reducing infrastructure costs
-→ Promoted twice for exceeding quarterly objectives
-
-What I look for:
-I thrive in environments that value ownership, impact, and continuous learning. Interested in roles where I can lead technical direction and mentor growing teams.
-
-Currently: Open to senior/lead opportunities in ${location || "innovative tech companies"}.
-
-📬 Reach out: [Email] or DM me here`,
-
-    senior: `Technical leader with ${profileAnalysis?.yearsOfExperience || 10}+ years architecting systems at scale and building high-performing teams.
-
-As a ${targetRole}, I've:
-→ Led teams of 10-20 engineers across multiple time zones
-→ Architected systems serving millions of daily active users
-→ Driven technical strategy for multi-million dollar initiatives
-→ Saved organizations $500K+ through technical optimization
-
-Expertise:
-${skills.slice(0, 5).map(s => `• ${s}`).join("\n")}
-
-I'm passionate about:
-1. Building products that scale
-2. Developing engineering talent
-3. Creating cultures of technical excellence
-
-Currently exploring: ${level === "senior" ? "Staff/Principal" : "Director"} roles in ${location || "high-growth companies"}.
-
-Conference speaker | Technical blogger | Open source contributor
-
-Let's connect if you're tackling interesting problems.`,
-
-    lead: `Engineering leader and ${targetRole} with ${profileAnalysis?.yearsOfExperience || 12}+ years building products and teams at scale.
-
-My impact:
-• Built and scaled engineering teams from 5 to 50+ engineers
-• Architected platforms processing 100M+ requests daily
-• Led digital transformation initiatives saving $2M+ annually
-• Established engineering practices adopted company-wide
-
-Areas of expertise:
-${skills.slice(0, 5).map(s => `◼ ${s}`).join("\n")}
-
-What I bring to organizations:
-✓ Technical vision and strategy
-✓ Team building and culture development
-✓ Cross-functional leadership
-✓ Board and executive communication
-
-Currently exploring opportunities as: VP Engineering, Director of Engineering, CTO
-
-Let's connect: [Email]`
-  };
-
-  // Calculate realistic score based on input
-  let overallScore = 60; // Base score
-  if (profileAnalysis?.coreSkills?.length > 5) overallScore += 10;
-  if (level === "mid" || level === "senior") overallScore += 10;
-  if (currentLinkedin?.about && currentLinkedin.about.length > 100) overallScore += 5;
-  overallScore = Math.min(85, overallScore); // Cap at 85 for mock
+  // Basic about
+  const levelText = level.charAt(0).toUpperCase() + level.slice(1);
+  let about = `${levelText}-level ${targetRole} with ${years > 0 ? `${years}+ years of experience` : "a passion for the field"}.`;
+  if (skills.length > 0) {
+    about += `\n\nCore competencies:\n${skills.slice(0, 6).map(s => `• ${s}`).join("\n")}`;
+  }
+  about += "\n\nOpen to new opportunities and connections.";
 
   return {
     headline: {
-      before: currentLinkedin?.headline || `${targetRole}`,
-      after: levelTitles[level] || levelTitles.mid,
-      tips: [
-        "Include your specialty and 2-3 key skills separated by | or •",
-        "Add a value proposition (what you help companies achieve)",
-        "Use industry keywords that recruiters search for",
-        "Keep it under 120 characters for mobile visibility",
-      ],
+      suggested: headline,
+      reasoning: "Basic headline generated without AI. Configure OPENAI_API_KEY for personalized optimization.",
+      keywords: skills.slice(0, 5),
+      hasActualData: skills.length > 0
     },
     about: {
-      before: currentLinkedin?.about || "I am a professional looking for new opportunities.",
-      after: levelAbout[level] || levelAbout.mid,
-      tips: [
-        "Start with a strong hook - who you are and what you do",
-        "Include 3-5 quantifiable achievements with numbers",
-        "Use bullet points and line breaks for scanability",
-        "End with a clear call-to-action (email, DM preference)",
-        "Include relevant keywords naturally throughout",
-      ],
+      suggested: about,
+      structure: "Basic structure",
+      keyHighlights: []
     },
-    experienceBullets: [
-      {
-        role: targetRole,
-        before: [
-          "Worked on various projects",
-          "Responsible for development tasks",
-          "Collaborated with team members"
-        ],
-        after: [
-          `Led development of ${skills[0]}-focused features resulting in 30% increase in user engagement`,
-          `Optimized ${skills[1] || "core systems"} reducing operational costs by $50K annually`,
-          `Mentored 3 junior team members, with 2 receiving promotions within 18 months`
-        ],
-      },
+    experienceTips: [
+      { tip: "Add quantified achievements", example: "Increased X by Y%", impact: "Shows measurable impact" },
+      { tip: "Start bullets with action verbs", example: "Led, Developed, Achieved", impact: "More impactful" },
+      { tip: "Include relevant keywords", example: "Add industry terms", impact: "Better ATS matching" }
     ],
-    keywords: [
-      targetRole,
-      ...skills.slice(0, 4),
-      level === "senior" ? "Tech Lead" : "Team Collaboration",
-      "Results-driven",
-      profileAnalysis?.industryFit?.[0] || "Technology"
+    skillsRecommendations: {
+      topSkillsToFeature: skills.slice(0, 3),
+      skillsToAdd: [],
+      orderingAdvice: "Order by relevance to target role"
+    },
+    keywordsToInclude: skills.slice(0, 8),
+    actionableTips: [
+      "Configure OPENAI_API_KEY for AI-powered LinkedIn optimization",
+      "Add a professional headshot",
+      "Enable 'Open to Work' for recruiters",
+      "Get 2-3 recommendations from colleagues"
     ],
-    overallScore,
-    topRecommendations: [
-      "Add a professional headshot — profiles with photos get 21x more views and 36x more messages",
-      "List your top 50 skills and get endorsements from colleagues — prioritize role-specific skills",
-      "Request 3-5 recommendations from managers and colleagues who can speak to your impact",
-      "Post or engage with content weekly — consistent activity boosts profile visibility by 5x",
-      "Customize your LinkedIn URL (linkedin.com/in/yourname) for a cleaner, professional look",
-      "Turn on 'Open to Work' privately so only recruiters see you're looking",
-    ],
-    skillsToAdd: roleRecommendations.add,
-    skillsToRemove: roleRecommendations.remove,
-    certifications: roleRecommendations.certifications
+    overallScore: 45,
+    scoreExplanation: "Limited analysis without AI. Set OPENAI_API_KEY for comprehensive optimization.",
+    aiPowered: false,
+    warning: "Basic optimization generated without AI."
   };
 }
 
+/**
+ * Optimize LinkedIn profile using AI
+ *
+ * @param {Object} input - Profile data
+ * @returns {Promise<Object>} - Comprehensive LinkedIn optimization
+ */
 export async function optimizeLinkedIn(input) {
   const { profileAnalysis, currentLinkedin, userInfo } = input;
 
+  // Extract all available data
+  const resumeText = input.resumeText ||
+                     userInfo?.resumeText ||
+                     input.existingResume || "";
+  const selfDescription = input.selfDescription ||
+                          userInfo?.selfDescription || "";
+  const targetRole = profileAnalysis?.suggestedRoles?.[0] || "";
+  const skills = profileAnalysis?.coreSkills || [];
+  const softSkills = profileAnalysis?.softSkills || [];
+  const years = profileAnalysis?.yearsOfExperience || 0;
+  const level = profileAnalysis?.experienceLevel || "mid";
+  const location = userInfo?.location || userInfo?.locations?.[0] || "";
+  const industryFit = profileAnalysis?.industryFit || [];
+  const uniqueStrengths = profileAnalysis?.uniqueStrengths || [];
+  const careerTrajectory = profileAnalysis?.careerTrajectory || "";
+
+  // Check if AI is available
+  if (!isAIAvailable()) {
+    console.warn("[LinkedIn Optimization] AI not available - returning basic optimization");
+    return generateBasicOptimization(input);
+  }
+
+  // Build comprehensive prompt
   const userPrompt = `
-Optimize this LinkedIn profile for a ${profileAnalysis?.experienceLevel || "mid-level"} professional:
+CANDIDATE PROFILE FOR LINKEDIN OPTIMIZATION:
 
-Name: ${userInfo?.fullName || "Not provided"}
-Target Role: ${profileAnalysis?.suggestedRoles?.[0] || "Not specified"}
-Experience Level: ${profileAnalysis?.experienceLevel || "Not specified"}
-Years of Experience: ${profileAnalysis?.yearsOfExperience || "Not specified"}
-Core Skills: ${profileAnalysis?.coreSkills?.join(", ") || "Not specified"}
-Location: ${userInfo?.location || "Not specified"}
+Target Role: ${targetRole || "Open to opportunities"}
+Experience Level: ${level} (${years} years)
+Location: ${location || "Not specified"}
 
-Current LinkedIn URL/Profile: ${currentLinkedin?.url || "Not provided"}
-Current LinkedIn Headline: ${currentLinkedin?.headline || "Not provided"}
-Current LinkedIn About: ${currentLinkedin?.about || "Not provided"}
-Current Experience: ${currentLinkedin?.experience || "Not provided"}
+Self-Description:
+${selfDescription || "Not provided"}
 
-Provide:
-1. Optimized headline with keywords recruiters search for
-2. Compelling About section with achievements and metrics
-3. Skills to add and remove
-4. Relevant certifications to pursue
-5. Actionable recommendations
+Resume/Experience:
+${resumeText?.slice(0, 2000) || "No resume provided"}
 
-Be realistic with scoring - most profiles score 60-75, only exceptional ones score 80+.
-Return as JSON.`;
+Current LinkedIn Summary (if any):
+${currentLinkedin || "Not provided"}
 
-  const response = await callAI(SYSTEM_PROMPT, userPrompt, { maxTokens: 2500 });
-  const mockData = generateMockLinkedInOptimization(input);
+Skills Identified:
+Technical: ${skills.join(", ") || "Not specified"}
+Soft Skills: ${softSkills.join(", ") || "Not specified"}
 
-  return parseAIResponse(response, mockData);
+Industries: ${industryFit.join(", ") || "Not specified"}
+
+Career Assessment:
+${careerTrajectory || "Not available"}
+
+Unique Strengths:
+${uniqueStrengths.join(", ") || "Not identified"}
+
+Please provide comprehensive LinkedIn optimization that will help this candidate:
+1. Get found by recruiters searching for ${targetRole || "relevant roles"}
+2. Stand out from other candidates at the ${level} level
+3. Convert profile views into connection requests and opportunities
+
+Be specific to THIS candidate - avoid generic advice.`;
+
+  console.log("[LinkedIn Optimization] Calling AI for comprehensive optimization...");
+  const optimizationResponse = await callAI(LINKEDIN_OPTIMIZER_PROMPT, userPrompt, {
+    model: "fast", // Use GPT-4o-mini (cost-effective)
+    maxTokens: 3000,
+    temperature: 0.7
+  });
+
+  // Parse response with fallback
+  const fallback = generateBasicOptimization(input);
+  const optimization = parseAIResponse(optimizationResponse, fallback);
+
+  // Mark as AI-powered
+  optimization.aiPowered = optimizationResponse !== null;
+
+  // Ensure all expected fields exist
+  if (!optimization.headline) {
+    optimization.headline = fallback.headline;
+  }
+  if (!optimization.about) {
+    optimization.about = fallback.about;
+  }
+  if (!optimization.experienceTips) {
+    optimization.experienceTips = fallback.experienceTips;
+  }
+  if (!optimization.skillsRecommendations) {
+    optimization.skillsRecommendations = fallback.skillsRecommendations;
+  }
+  if (!optimization.actionableTips) {
+    optimization.actionableTips = fallback.actionableTips;
+  }
+
+  // Add metadata
+  optimization.dataSource = {
+    note: "Recommendations based on your provided profile information.",
+    aiEnhanced: optimizationResponse !== null
+  };
+
+  // Add certification recommendations based on role
+  optimization.certifications = {
+    recommended: getCertificationsForRole(targetRole),
+    role: targetRole,
+    tip: "Certifications boost credibility and help you rank higher in recruiter searches."
+  };
+
+  // Add general tips that are always relevant
+  optimization.generalTips = {
+    profileCompleteness: [
+      "Add a professional headshot - profiles with photos get 21x more views",
+      "Customize your LinkedIn URL (linkedin.com/in/yourname)",
+      "Add Featured section to showcase work samples or achievements",
+      "Request 2-3 recommendations from colleagues or managers"
+    ],
+    recruiterVisibility: [
+      "Enable 'Open to Work' with 'Recruiters Only' option for discreet job searching",
+      `Follow companies hiring for ${targetRole || "your target"} roles`,
+      "Engage with content weekly - comment on 3-5 posts",
+      "Join 3-5 relevant industry groups"
+    ],
+    profileSEO: [
+      "Include your target job title in headline, summary, and current position",
+      "Use industry-standard terminology (React not ReactJS)",
+      "Include both acronyms and full terms (SEO and Search Engine Optimization)",
+      "Mirror keywords from job descriptions you're targeting"
+    ]
+  };
+
+  return optimization;
+}
+
+/**
+ * Get relevant certifications for a role
+ */
+function getCertificationsForRole(role) {
+  const roleLower = (role || "").toLowerCase();
+
+  const certMap = {
+    "software": ["AWS Certified Developer", "Google Cloud Professional", "Kubernetes Administrator"],
+    "frontend": ["Meta Front-End Developer", "AWS Cloud Practitioner", "Google UX Design"],
+    "backend": ["AWS Solutions Architect", "MongoDB Developer", "Docker Certified Associate"],
+    "data": ["Google Data Analytics", "AWS Data Analytics", "Databricks Certified"],
+    "product": ["Product School Certification", "Pragmatic Institute", "Scrum Product Owner"],
+    "devops": ["AWS DevOps Engineer", "Kubernetes CKA", "HashiCorp Terraform"],
+    "ux": ["Google UX Design", "Nielsen Norman UX", "Interaction Design Foundation"],
+    "manager": ["PMP", "Scrum Master CSM", "Six Sigma Green Belt"],
+    "marketing": ["Google Ads", "HubSpot Inbound", "Meta Blueprint"],
+    "sales": ["Salesforce Administrator", "HubSpot Sales", "Sandler Training"],
+    "analyst": ["Google Data Analytics", "Microsoft Power BI", "Tableau Desktop"],
+    "security": ["CISSP", "CompTIA Security+", "AWS Security Specialty"],
+    "cloud": ["AWS Solutions Architect", "Google Cloud Architect", "Azure Administrator"],
+  };
+
+  for (const [key, certs] of Object.entries(certMap)) {
+    if (roleLower.includes(key)) {
+      return certs;
+    }
+  }
+
+  return ["Industry-relevant certifications", "Leadership certifications"];
 }

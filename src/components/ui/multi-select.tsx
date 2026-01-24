@@ -134,7 +134,7 @@ export function MultiSelect({
             <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-full p-0" align="start" style={{ width: "var(--radix-popover-trigger-width)" }}>
+        <PopoverContent className="w-full p-0 bg-zinc-900 border border-zinc-700 shadow-lg" align="start" style={{ width: "var(--radix-popover-trigger-width)" }}>
           <Command shouldFilter={false}>
             <div className="flex items-center border-b px-3">
               <Search className="h-4 w-4 shrink-0 opacity-50 mr-2" />

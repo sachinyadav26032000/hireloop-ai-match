@@ -5,8 +5,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { ChatBot } from "@/components/ChatBot";
 import Index from "./pages/Index";
 import Assistant from "./pages/Assistant";
+import ResumeBuilder from "./pages/ResumeBuilder";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import JobSeekerDashboard from "./pages/dashboard/JobSeekerDashboard";
@@ -26,9 +28,11 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <ChatBot />
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/assistant" element={<Assistant />} />
+            <Route path="/resume-builder" element={<ResumeBuilder />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route 

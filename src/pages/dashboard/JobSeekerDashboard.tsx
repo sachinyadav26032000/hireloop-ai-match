@@ -7,28 +7,24 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { useToast } from '@/hooks/use-toast';
-import { 
-  Upload, 
-  FileText, 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Globe, 
-  Briefcase, 
-  DollarSign, 
+import {
+  Upload,
+  FileText,
+  User,
+  Phone,
+  MapPin,
+  Globe,
+  Briefcase,
+  DollarSign,
   Search,
   LogOut,
   Eye,
-  Plus,
   Home,
   Clock,
   CheckCircle,
@@ -36,7 +32,6 @@ import {
   AlertTriangle,
   Crown,
   Trash2,
-  Calendar,
   Send,
   Download,
   Star,
@@ -235,7 +230,7 @@ const JobSeekerDashboard = () => {
     try {
       // Upload file to Supabase storage
       const fileName = `${user.id}/${Date.now()}-${file.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('resumes')
         .upload(fileName, file);
 
@@ -422,7 +417,7 @@ const JobSeekerDashboard = () => {
     }
   };
 
-  const getStatusBadge = (status: string, viewedAt: string | null, responseDate: string | null) => {
+  const getStatusBadge = (status: string, viewedAt: string | null, _responseDate: string | null) => {
     if (status === 'accepted') {
       return <Badge className="bg-green-100 text-green-800"><CheckCircle className="h-3 w-3 mr-1" />Accepted</Badge>;
     }

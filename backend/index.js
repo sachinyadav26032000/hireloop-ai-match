@@ -1,10 +1,11 @@
+// Load environment variables FIRST (before any other imports)
+import "dotenv/config";
+
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import analyzeRoute from "./routes/analyze.js";
 import assistantRoute from "./routes/assistant.js";
-
-dotenv.config();
+import { getAIMode, isAIAvailable } from "./services/aiAdapter.js";
 
 const app = express();
 app.use(cors());
@@ -15,6 +16,14 @@ app.use("/analyze", analyzeRoute);
 
 // New unified assistant endpoints
 app.use("/assistant", assistantRoute);
+
+// Debug: List all registered routes
+console.log("Registered routes:");
+assistantRoute.stack.forEach((r, i) => {
+  if (r.route) {
+    console.log(`  ${i}: ${Object.keys(r.route.methods).join(',').toUpperCase()} /assistant${r.route.path}`);
+  }
+});
 
 // Root health check
 app.get("/", (req, res) => {
@@ -28,5 +37,6 @@ app.get("/", (req, res) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
-  console.log(`API Key configured: ${process.env.ANTHROPIC_API_KEY ? "Yes" : "No (mock mode)"}`);
+  console.log(`AI Mode: ${getAIMode()}`);
+  console.log(`AI Available: ${isAIAvailable() ? "Yes - Real AI enabled" : "No - Configure API key"}`);
 });
