@@ -8,7 +8,10 @@ import assistantRoute from "./routes/assistant.js";
 import { getAIMode, isAIAvailable } from "./services/aiAdapter.js";
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: true, // Allow all origins in development
+  credentials: true,
+}));
 app.use(express.json({ limit: "10mb" }));
 
 // Legacy analyze endpoint
@@ -36,7 +39,17 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Backend running on http://localhost:${PORT}`);
-  console.log(`AI Mode: ${getAIMode()}`);
-  console.log(`AI Available: ${isAIAvailable() ? "Yes - Real AI enabled" : "No - Configure API key"}`);
+  const aiMode = getAIMode();
+  console.log(`\n🚀 Backend running on http://localhost:${PORT}`);
+  console.log(`\n📊 AI Configuration:`);
+  console.log(`   Mode: ${aiMode}`);
+  if (aiMode === "claude-code-cli") {
+    console.log(`   ✓ Claude Code agents enabled for local development`);
+    console.log(`   Agents: Resume Extraction, Skill Analysis, CV Generation`);
+  } else if (aiMode === "no-ai-configured") {
+    console.log(`   ⚠ No AI configured - set USE_CLAUDE_CODE=true for local agents`);
+  } else {
+    console.log(`   ✓ Real AI enabled via ${aiMode}`);
+  }
+  console.log("");
 });

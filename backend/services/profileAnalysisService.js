@@ -10,6 +10,7 @@
  * The AI analyzes the candidate holistically, not just pattern matching.
  */
 import { callAI, parseAIResponse, isAIAvailable } from "./aiAdapter.js";
+import { analyzeSkills as analyzeWithAgent, isClaudeCodeEnabled } from "../agents/index.js";
 
 /**
  * System prompt for AI career analysis
@@ -173,7 +174,63 @@ export async function analyzeProfile(input) {
   // Normalize desiredRole (handle array or string)
   const normalizedRole = Array.isArray(desiredRole) ? desiredRole[0] : desiredRole;
 
-  // Check if AI is available
+  // Try Claude Code agent first if enabled (preferred for local dev)
+  if (isClaudeCodeEnabled()) {
+    console.log("[Profile Analysis] Using Claude Code agent for analysis...");
+    try {
+      const agentResult = await analyzeWithAgent(input);
+      console.log("[Profile Analysis] Agent result:", agentResult ? "received" : "null",
+        agentResult?._analyzedBy || "no-marker");
+
+      if (agentResult && agentResult._analyzedBy === "claude-code-agent") {
+        console.log("[Profile Analysis] ✓ Claude Code agent analysis successful");
+        // Add ATS score breakdown (agent provides detailed analysis)
+        return {
+          ...agentResult,
+          aiPowered: true,
+          atsScoreBreakdown: {
+            overall: agentResult.marketPositioning?.competitiveness || 70,
+            keywordRelevance: 70,
+            impactMetrics: 65,
+            roleAlignment: agentResult.roleAnalysis?.suggestedRoles?.[0]?.fitScore || 70,
+            formattingClarity: 75,
+          },
+        };
+      }
+
+      // Agent returned but without proper marker - might be fallback data
+      if (agentResult) {
+        console.log("[Profile Analysis] Agent returned fallback data, using it");
+        return {
+          ...agentResult,
+          aiPowered: false,
+          atsScoreBreakdown: {
+            overall: 50,
+            warning: "Claude Code agent returned basic analysis"
+          }
+        };
+      }
+    } catch (err) {
+      console.error("[Profile Analysis] Claude Code agent error:", err.message);
+    }
+
+    // If Claude Code is the ONLY AI option and it failed, use basic analysis
+    // Don't try API calls since we know they'll fail too
+    const hasApiKeys = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY;
+    if (!hasApiKeys) {
+      console.warn("[Profile Analysis] Claude Code failed, no API keys - using basic analysis");
+      const basicAnalysis = extractBasicInfo(input);
+      return {
+        ...basicAnalysis,
+        atsScoreBreakdown: {
+          overall: 50,
+          warning: "AI analysis failed. Using rule-based analysis."
+        }
+      };
+    }
+  }
+
+  // Check if AI is available (API keys)
   if (!isAIAvailable()) {
     console.warn("[Profile Analysis] AI not available - returning basic analysis");
     const basicAnalysis = extractBasicInfo(input);

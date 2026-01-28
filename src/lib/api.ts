@@ -2,7 +2,7 @@
  * API Client for HireLoop AI Assistant
  */
 
-const API_BASE = "http://localhost:5000";
+const API_BASE = "http://localhost:5001";
 
 // ATS Score Breakdown interface
 export interface ATSScoreBreakdown {

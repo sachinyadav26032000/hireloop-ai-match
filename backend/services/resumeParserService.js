@@ -16,6 +16,7 @@ const require = createRequire(import.meta.url);
 const { PDFParse } = require("pdf-parse");
 import mammoth from "mammoth";
 import { callAI, parseAIResponse, isAIAvailable } from "./aiAdapter.js";
+import { extractResumeData as extractWithAgent, isClaudeCodeEnabled } from "../agents/index.js";
 
 /**
  * Detect mismatches between form data and resume data
@@ -168,12 +169,42 @@ export async function parseResumeFile(fileBuffer, mimeType, filename) {
     extractedData = emptyExtractedData;
   }
 
+  // Try Claude Code agent for enhanced extraction if enabled
+  let agentExtraction = null;
+  if (isClaudeCodeEnabled() && text && text.length > 100) {
+    console.log("[ResumeParser] Using Claude Code agent for enhanced extraction...");
+    try {
+      agentExtraction = await extractWithAgent(text);
+      if (agentExtraction) {
+        console.log("[ResumeParser] ✓ Claude Code agent extraction successful");
+        // Merge agent extraction with basic extraction
+        extractedData = {
+          name: agentExtraction.contact?.name || extractedData.name,
+          email: agentExtraction.contact?.email || extractedData.email,
+          phone: agentExtraction.contact?.phone || extractedData.phone,
+          linkedin: agentExtraction.contact?.linkedin || extractedData.linkedin,
+          skills: [
+            ...(agentExtraction.skills?.technical || []),
+            ...(agentExtraction.skills?.soft || []),
+            ...(agentExtraction.skills?.tools || []),
+          ],
+          experience: agentExtraction.experience || extractedData.experience,
+          education: agentExtraction.education || extractedData.education,
+          suggestedRoles: agentExtraction.summary?.suggestedRoles || extractedData.suggestedRoles,
+        };
+      }
+    } catch (err) {
+      console.log("[ResumeParser] Claude Code agent error (continuing with basic):", err.message);
+    }
+  }
+
   // ALWAYS return success
   return {
     success: true,
     text: text || "",
     extractedData: extractedData || emptyExtractedData,
     wordCount: text ? text.split(/\s+/).filter(w => w.length > 0).length : 0,
+    agentExtraction: agentExtraction, // Include full agent extraction if available
   };
 }
 

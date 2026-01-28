@@ -1,13 +1,21 @@
 /**
- * AI Adapter - OpenAI-First Implementation
+ * AI Adapter - Multi-Provider Implementation
  *
- * This adapter prioritizes real AI responses using OpenAI's GPT models.
- * Fallback to Anthropic Claude if OpenAI unavailable.
+ * Priority order for AI calls:
+ * 1. OpenAI API (if OPENAI_API_KEY configured)
+ * 2. Anthropic API (if ANTHROPIC_API_KEY configured)
+ * 3. Claude Code CLI (if USE_CLAUDE_CODE=true) - for local development
  *
  * Uses runtime environment checks to ensure dotenv is loaded.
  */
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import {
+  isClaudeCodeEnabled,
+  isClaudeCodeAvailable,
+  runClaudeCode,
+  runClaudeCodeForJSON,
+} from "../agents/claudeCodeRunner.js";
 
 // Initialize clients lazily
 let openaiClient = null;
@@ -53,9 +61,14 @@ function initializeClients() {
   } else if (isAnthropicConfigured()) {
     anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     console.log("[AI Adapter] ✓ Anthropic Claude initialized - Real AI enabled");
+  } else if (isClaudeCodeEnabled()) {
+    console.log("[AI Adapter] ✓ Claude Code CLI mode enabled - Local AI agents active");
   } else {
-    console.warn("[AI Adapter] ⚠ No valid API key found!");
-    console.warn("[AI Adapter] Set OPENAI_API_KEY in backend/.env for AI-powered responses");
+    console.warn("[AI Adapter] ⚠ No valid AI provider configured!");
+    console.warn("[AI Adapter] Options:");
+    console.warn("[AI Adapter]   1. Set OPENAI_API_KEY in backend/.env");
+    console.warn("[AI Adapter]   2. Set ANTHROPIC_API_KEY in backend/.env");
+    console.warn("[AI Adapter]   3. Set USE_CLAUDE_CODE=true for local Claude Code CLI");
   }
 }
 
@@ -173,6 +186,25 @@ export async function callAI(systemPrompt, userPrompt, options = {}) {
     }
   }
 
+  // Fallback to Claude Code CLI (local development)
+  if (isClaudeCodeEnabled()) {
+    console.log("[AI Adapter] Trying Claude Code CLI...");
+    try {
+      const available = await isClaudeCodeAvailable();
+      if (available) {
+        const response = await runClaudeCode(systemPrompt, userPrompt, { maxTokens });
+        if (response) {
+          console.log(`[AI Adapter] ✓ Claude Code response received (${response.length} chars)`);
+          return response;
+        }
+      } else {
+        console.warn("[AI Adapter] Claude Code CLI not found in PATH");
+      }
+    } catch (error) {
+      console.error("[AI Adapter] Claude Code CLI failed:", error.message);
+    }
+  }
+
   console.error("[AI Adapter] All AI providers failed");
   return null;
 }
@@ -233,6 +265,7 @@ export function getAIMode() {
   console.log(`[AI Debug] getAIMode called - key exists: ${!!key}, key length: ${key?.length}, configured: ${configured}`);
   if (configured) return "openai-gpt";
   if (isAnthropicConfigured()) return "anthropic-claude";
+  if (isClaudeCodeEnabled()) return "claude-code-cli";
   return "no-ai-configured";
 }
 
@@ -240,7 +273,7 @@ export function getAIMode() {
  * Check if AI is available (runtime check)
  */
 export function isAIAvailable() {
-  return isOpenAIConfigured() || isAnthropicConfigured();
+  return isOpenAIConfigured() || isAnthropicConfigured() || isClaudeCodeEnabled();
 }
 
 /**
@@ -254,11 +287,30 @@ export function isMockMode() {
  * Get AI configuration status
  */
 export function getAIStatus() {
+  let provider = "none";
+  let model = null;
+  let powerfulModel = null;
+
+  if (isOpenAIConfigured()) {
+    provider = "openai";
+    model = MODELS.fast;
+    powerfulModel = MODELS.powerful;
+  } else if (isAnthropicConfigured()) {
+    provider = "anthropic";
+    model = MODELS.claudeFast;
+    powerfulModel = MODELS.claudePowerful;
+  } else if (isClaudeCodeEnabled()) {
+    provider = "claude-code-cli";
+    model = "claude-code";
+    powerfulModel = "claude-code";
+  }
+
   return {
     available: isAIAvailable(),
-    provider: isOpenAIConfigured() ? "openai" : isAnthropicConfigured() ? "anthropic" : "none",
-    model: isOpenAIConfigured() ? MODELS.fast : isAnthropicConfigured() ? MODELS.claudeFast : null,
-    powerfulModel: isOpenAIConfigured() ? MODELS.powerful : isAnthropicConfigured() ? MODELS.claudePowerful : null,
+    provider,
+    model,
+    powerfulModel,
+    claudeCodeEnabled: isClaudeCodeEnabled(),
   };
 }
 
