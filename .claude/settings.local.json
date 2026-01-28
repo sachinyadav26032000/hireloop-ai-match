@@ -44,7 +44,8 @@
       "Bash(kill:*)",
       "Bash(xxd:*)",
       "Bash(node:*)",
-      "Bash(start /B node index.js)"
+      "Bash(start /B node index.js)",
+      "Bash(claude --print --dangerously-skip-permissions)"
     ]
   }
 }

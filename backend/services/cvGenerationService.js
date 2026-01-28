@@ -11,6 +11,7 @@
  * Only enhance and reformat information the user provides.
  */
 import { callAI, parseAIResponse, isAIAvailable } from "./aiAdapter.js";
+import { generateCV as generateWithAgent, isClaudeCodeEnabled } from "../agents/index.js";
 
 /**
  * System prompt for CV content generation
@@ -182,6 +183,34 @@ export async function generateCV(input) {
   const parsedExperience = input.parsedExperience || parseResumeForExperience(existingResume);
   const parsedEducation = input.parsedEducation || parseResumeForEducation(existingResume);
   const certifications = input.parsedCertifications || [];
+
+  // Try Claude Code agent first if enabled
+  if (isClaudeCodeEnabled()) {
+    console.log("[CV Generation] Using Claude Code agent for CV generation...");
+    try {
+      const agentResult = await generateWithAgent({
+        profileAnalysis,
+        extractedResume: input.extractedResume,
+        userInfo: {
+          fullName: name,
+          email,
+          phone,
+          location,
+          linkedinUrl: linkedin,
+          selfDescription,
+          locations: userInfo?.locations,
+        },
+        existingResume,
+        targetRole,
+      });
+      if (agentResult && agentResult._generatedBy === "claude-code-agent") {
+        console.log("[CV Generation] ✓ Claude Code agent CV generation successful");
+        return agentResult;
+      }
+    } catch (err) {
+      console.log("[CV Generation] Claude Code agent error (continuing with API):", err.message);
+    }
+  }
 
   // Check if AI is available
   if (!isAIAvailable()) {

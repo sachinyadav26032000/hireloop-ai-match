@@ -255,7 +255,7 @@ function ResumeBuilderContent() {
   const handleAiImprove = useCallback(
     async (section: string, content: string, context?: any) => {
       try {
-        const response = await fetch("http://localhost:5000/assistant/improve-section", {
+        const response = await fetch("http://localhost:5001/assistant/improve-section", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ section, content, context }),
