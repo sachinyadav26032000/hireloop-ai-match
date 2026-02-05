@@ -98,6 +98,55 @@ export interface LinkedInOptimization {
     basedOn: string[];
     notUsed: string[];
   };
+  // NEW: Complete LinkedIn Profile Preview
+  profilePreview?: {
+    profileHeader: {
+      name: string;
+      headline: string;
+      location: string;
+      connections: string;
+      openToWork: boolean;
+      profilePhoto: string | null;
+    };
+    intro: {
+      currentPosition: string;
+      currentCompany: string;
+      education: string;
+      contactInfo: {
+        email: string;
+        phone: string;
+        linkedin: string;
+        location: string;
+      };
+    };
+    about: {
+      content: string;
+      characterCount: number;
+      keywords: string[];
+    };
+    experience: {
+      title: string;
+      company: string;
+      duration: string;
+      location?: string;
+      bullets: string[];
+    }[];
+    education: {
+      degree: string;
+      institution: string;
+      year: string;
+      field?: string;
+    }[];
+    skills: {
+      featured: string[];
+      technical: string[];
+      soft: string[];
+      all: string[];
+    };
+    certifications: string[];
+    recommendationPrompt: string;
+    seoKeywords: string[];
+  };
 }
 
 export interface JobMatch {
@@ -373,11 +422,12 @@ export const assistantApi = {
   async optimizeLinkedIn(
     profileAnalysis: ProfileAnalysis,
     userInfo: AssistantInput["userInfo"],
-    currentLinkedin?: AssistantInput["currentLinkedin"]
+    currentLinkedin?: AssistantInput["currentLinkedin"],
+    cvData?: CVData
   ) {
     return apiCall<{ success: boolean; data: LinkedInOptimization; mockMode: boolean }>("/assistant/optimize-linkedin", {
       method: "POST",
-      body: JSON.stringify({ profileAnalysis, userInfo, currentLinkedin }),
+      body: JSON.stringify({ profileAnalysis, userInfo, currentLinkedin, cvData }),
     });
   },
 

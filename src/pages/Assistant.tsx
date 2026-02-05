@@ -79,6 +79,11 @@ import {
   Palette,
   Zap,
   FileEdit,
+  Users,
+  Mail,
+  Star,
+  Lightbulb,
+  GraduationCap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -877,7 +882,8 @@ function AssistantContent() {
       const result = await assistantApi.optimizeLinkedIn(
         profileAnalysis,
         { fullName, email, location },
-        { about: linkedinUrl, url: linkedinUrl }
+        { about: linkedinUrl, url: linkedinUrl },
+        cvData || undefined // Pass CV data for experience, education, etc.
       );
 
       setLinkedinOptimization(result.data);
@@ -1944,299 +1950,307 @@ function AssistantContent() {
               </Card>
             ) : (
               <div className="space-y-6">
-                <Card className="bg-zinc-900/50 backdrop-blur border-zinc-800 shadow-2xl">
-                  <CardHeader className="border-b border-zinc-800">
-                    <CardTitle className="flex items-center gap-3 text-white">
-                      <div className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600">
-                        <Linkedin className="h-5 w-5 text-white" />
+                {/* LinkedIn Profile Preview Card */}
+                <Card className="bg-zinc-900/50 backdrop-blur border-zinc-800 shadow-2xl overflow-hidden">
+                  {/* LinkedIn-style Banner */}
+                  <div className="h-24 bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 relative">
+                    <div className="absolute top-2 right-2 flex gap-2">
+                      <Badge className="bg-emerald-500/90 text-white text-xs">
+                        #OpenToWork
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Profile Header Section */}
+                  <div className="px-6 pb-4 relative">
+                    {/* Profile Photo Placeholder */}
+                    <div className="absolute -top-12 left-6">
+                      <div className="w-24 h-24 rounded-full border-4 border-zinc-900 bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-xl">
+                        <span className="text-white text-2xl font-bold">
+                          {linkedinOptimization.profilePreview?.profileHeader?.name?.split(" ").map(n => n[0]).join("").slice(0, 2) || fullName?.split(" ").map(n => n[0]).join("").slice(0, 2) || "?"}
+                        </span>
                       </div>
-                      LinkedIn Optimization
-                    </CardTitle>
-                    <CardDescription className="text-zinc-400">
-                      Recommendations generated from your resume and career goals
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-6">
-                    <div className="p-3 mb-4 bg-violet-500/10 border border-violet-500/20 rounded-xl flex items-start gap-2">
-                      <Info className="h-4 w-4 text-violet-400 mt-0.5" />
-                      <p className="text-sm text-violet-300">
-                        LinkedIn recommendations are generated using your resume, linkedin url and career details.
-                      </p>
                     </div>
 
-                    <Tabs defaultValue="headline" className="w-full">
-                      <TabsList className="grid w-full grid-cols-4 bg-zinc-800 border border-zinc-700">
-                        <TabsTrigger value="headline" className="data-[state=active]:bg-violet-600">Headline</TabsTrigger>
-                        <TabsTrigger value="about" className="data-[state=active]:bg-violet-600">About</TabsTrigger>
-                        <TabsTrigger value="skills" className="data-[state=active]:bg-violet-600">Skills</TabsTrigger>
-                        <TabsTrigger value="tips" className="data-[state=active]:bg-violet-600">Tips</TabsTrigger>
-                      </TabsList>
-
-                      <TabsContent value="headline" className="space-y-4 pt-4">
-                        {linkedinOptimization.headline?.after ? (
-                          <>
-                            <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                              <div className="flex justify-between items-start mb-2">
-                                <p className="text-sm text-emerald-400 font-medium">Suggested Headline</p>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => copyToClipboard(linkedinOptimization.headline.after, "Headline")}
-                                  className="text-zinc-400 hover:text-white"
-                                >
-                                  <Copy className="h-4 w-4" />
-                                </Button>
-                              </div>
-                              <p className="text-white font-medium mt-2">
-                                {linkedinOptimization.headline.after}
-                              </p>
-                            </div>
-                          </>
-                        ) : null}
-
-                        {/* Always show structure guidance */}
-                        <div className="p-4 bg-violet-500/10 border border-violet-500/20 rounded-xl">
-                          <h4 className="font-medium text-violet-400 mb-3 flex items-center gap-2">
-                            <BookOpen className="h-4 w-4" />
-                            Headline Structure Guide
-                          </h4>
-                          <div className="space-y-3">
-                            <div className="p-3 bg-zinc-800/50 rounded-lg">
-                              <p className="text-sm text-zinc-400 mb-1">Recommended Format:</p>
-                              <p className="text-zinc-200 font-mono text-sm">
-                                Role | Skill 1 | Skill 2 | X Years Experience
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-zinc-400 mb-2">Examples:</p>
-                              <ul className="space-y-1 text-sm text-zinc-300">
-                                <li>• Senior Software Engineer | React | Node.js | 7+ Years</li>
-                                <li>• Product Manager | SaaS | Agile | Data-Driven | 5+ Years</li>
-                                <li>• Marketing Director | Growth | B2B | 10+ Years</li>
-                              </ul>
-                            </div>
-                            <div>
-                              <p className="text-sm text-zinc-400 mb-2">Best Practices:</p>
-                              <ul className="space-y-1 text-sm text-zinc-300">
-                                <li>• Front-load your most searchable job title</li>
-                                <li>• Include 2-3 high-demand skills for your industry</li>
-                                <li>• Keep under 120 characters for mobile visibility</li>
-                                <li>• Avoid generic phrases like "Seeking Opportunities"</li>
-                              </ul>
-                            </div>
-                          </div>
-                        </div>
-                      </TabsContent>
-
-                      <TabsContent value="about" className="space-y-4 pt-4">
-                        {linkedinOptimization.about?.after ? (
-                          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                            <div className="flex justify-between items-start mb-2">
-                              <p className="text-sm text-emerald-400 font-medium">Suggested About Section</p>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => copyToClipboard(linkedinOptimization.about.after, "About section")}
-                                className="text-zinc-400 hover:text-white"
-                              >
-                                <Copy className="h-4 w-4" />
-                              </Button>
-                            </div>
-                            <p className="text-zinc-200 text-sm whitespace-pre-line mt-2">
-                              {linkedinOptimization.about.after}
-                            </p>
-                          </div>
-                        ) : null}
-
-                        {/* Always show structure guidance */}
-                        <div className="p-4 bg-violet-500/10 border border-violet-500/20 rounded-xl">
-                          <h4 className="font-medium text-violet-400 mb-3 flex items-center gap-2">
-                            <BookOpen className="h-4 w-4" />
-                            About Section Structure Guide
-                          </h4>
-                          <div className="space-y-3">
-                            <p className="text-sm text-zinc-400">Use this 5-paragraph structure for maximum impact:</p>
-                            <div className="space-y-2">
-                              <div className="p-3 bg-zinc-800/50 rounded-lg">
-                                <p className="text-sm font-medium text-emerald-400">1. Opening Hook</p>
-                                <p className="text-xs text-zinc-400 mt-1">Strong positioning statement establishing who you are</p>
-                                <p className="text-xs text-zinc-500 italic mt-1">Example: "Results-driven [Role] with [X]+ years..."</p>
-                              </div>
-                              <div className="p-3 bg-zinc-800/50 rounded-lg">
-                                <p className="text-sm font-medium text-emerald-400">2. Core Expertise</p>
-                                <p className="text-xs text-zinc-400 mt-1">Bullet list of 6-8 key skills/competencies</p>
-                              </div>
-                              <div className="p-3 bg-zinc-800/50 rounded-lg">
-                                <p className="text-sm font-medium text-emerald-400">3. Key Achievements</p>
-                                <p className="text-xs text-zinc-400 mt-1">2-3 quantified accomplishments with metrics</p>
-                              </div>
-                              <div className="p-3 bg-zinc-800/50 rounded-lg">
-                                <p className="text-sm font-medium text-emerald-400">4. Industry Context</p>
-                                <p className="text-xs text-zinc-400 mt-1">Domain expertise and industry experience</p>
-                              </div>
-                              <div className="p-3 bg-zinc-800/50 rounded-lg">
-                                <p className="text-sm font-medium text-emerald-400">5. Call to Action</p>
-                                <p className="text-xs text-zinc-400 mt-1">What you're looking for and how to connect</p>
-                              </div>
-                            </div>
-                            <div className="text-xs text-zinc-500 mt-2">
-                              <p>• Use all 2600 characters for maximum keyword density</p>
-                              <p>• Write in first person for authenticity</p>
-                              <p>• Include keywords from target job descriptions</p>
-                            </div>
-                          </div>
-                        </div>
-                      </TabsContent>
-
-                      <TabsContent value="skills" className="space-y-4 pt-4">
-                        {linkedinOptimization.skillsSection?.skills?.length > 0 ? (
-                          <div className="space-y-3 p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <h4 className="font-medium flex items-center gap-2 text-purple-400">
-                                  <Award className="h-4 w-4" />
-                                  Skills from Your Resume ({linkedinOptimization.skillsSection.skills?.length || 0} detected)
-                                </h4>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => copyToClipboard(linkedinOptimization.skillsSection?.skills?.join(", ") || "", "Skills list")}
-                                className="text-zinc-400 hover:text-white"
-                              >
-                                <Copy className="h-4 w-4" />
-                              </Button>
-                            </div>
-                            <div className="flex flex-wrap gap-2 mt-2">
-                              {linkedinOptimization.skillsSection.skills.map((skill: string, i: number) => (
-                                <Badge
-                                  key={skill}
-                                  className={cn(
-                                    "transition-all",
-                                    i < 5 ? "bg-purple-500/30 text-purple-200" :
-                                    i < 10 ? "bg-purple-500/20 text-purple-300" :
-                                    "bg-purple-500/10 text-purple-400 border border-purple-500/30"
-                                  )}
-                                >
-                                  {i < 5 && "★ "}{skill}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="p-4 bg-zinc-800/50 border border-zinc-700 rounded-xl">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Info className="h-4 w-4 text-zinc-400" />
-                              <p className="text-sm text-zinc-400">No skills detected from your resume yet</p>
-                            </div>
-                            <p className="text-xs text-zinc-500">Add your skills manually or upload a detailed resume to auto-detect skills.</p>
-                          </div>
+                    {/* Name and Headline */}
+                    <div className="pt-14 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-xl font-bold text-white">
+                          {linkedinOptimization.profilePreview?.profileHeader?.name || fullName || "Your Name"}
+                        </h2>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => copyToClipboard(linkedinOptimization.profilePreview?.profileHeader?.name || fullName || "", "Name")}
+                          className="text-zinc-500 hover:text-white h-6 w-6 p-0"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-zinc-300 text-sm">
+                          {linkedinOptimization.profilePreview?.profileHeader?.headline || linkedinOptimization.headline?.after || "Your Professional Headline"}
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => copyToClipboard(linkedinOptimization.profilePreview?.profileHeader?.headline || linkedinOptimization.headline?.after || "", "Headline")}
+                          className="text-zinc-500 hover:text-white h-6 w-6 p-0"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-zinc-400 mt-2">
+                        {(linkedinOptimization.profilePreview?.profileHeader?.location || location) && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {linkedinOptimization.profilePreview?.profileHeader?.location || location}
+                          </span>
                         )}
+                        <span className="flex items-center gap-1">
+                          <Users className="h-3 w-3" />
+                          500+ connections
+                        </span>
+                      </div>
+                    </div>
 
-                        {/* Always show skills ordering guidance */}
-                        <div className="p-4 bg-violet-500/10 border border-violet-500/20 rounded-xl">
-                          <h4 className="font-medium text-violet-400 mb-3 flex items-center gap-2">
-                            <BookOpen className="h-4 w-4" />
-                            LinkedIn Skills Strategy
-                          </h4>
-                          <div className="space-y-3">
-                            <div>
-                              <p className="text-sm text-zinc-400 mb-2">Optimal Order (Top 3 appear on profile card):</p>
-                              <ol className="space-y-1 text-sm text-zinc-300 list-decimal list-inside">
-                                <li>Role-specific technical skills (most important)</li>
-                                <li>Industry tools and platforms</li>
-                                <li>Transferable soft skills</li>
-                              </ol>
+                    {/* Contact Info */}
+                    <div className="flex gap-2 mt-4">
+                      <Button size="sm" className="bg-blue-600 hover:bg-blue-500 text-white text-xs">
+                        <Linkedin className="h-3 w-3 mr-1" /> Open to Work
+                      </Button>
+                      <Button size="sm" variant="outline" className="border-zinc-600 text-zinc-300 text-xs">
+                        <Mail className="h-3 w-3 mr-1" /> Contact
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* About Section Preview */}
+                <Card className="bg-zinc-900/50 backdrop-blur border-zinc-800 shadow-2xl">
+                  <CardHeader className="pb-2">
+                    <div className="flex justify-between items-center">
+                      <CardTitle className="text-white text-lg flex items-center gap-2">
+                        <User className="h-5 w-5 text-blue-400" />
+                        About
+                      </CardTitle>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => copyToClipboard(linkedinOptimization.profilePreview?.about?.content || linkedinOptimization.about?.after || "", "About section")}
+                        className="text-zinc-400 hover:text-white"
+                      >
+                        <Copy className="h-4 w-4 mr-1" /> Copy
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700">
+                      <p className="text-zinc-200 text-sm whitespace-pre-line leading-relaxed">
+                        {linkedinOptimization.profilePreview?.about?.content || linkedinOptimization.about?.after || "Your professional summary will appear here..."}
+                      </p>
+                      {linkedinOptimization.profilePreview?.about?.characterCount && (
+                        <p className="text-xs text-zinc-500 mt-3 flex items-center gap-1">
+                          <Info className="h-3 w-3" />
+                          {linkedinOptimization.profilePreview.about.characterCount} / 2,600 characters
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Experience Section Preview */}
+                {linkedinOptimization.profilePreview?.experience && linkedinOptimization.profilePreview.experience.length > 0 && (
+                  <Card className="bg-zinc-900/50 backdrop-blur border-zinc-800 shadow-2xl">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-white text-lg flex items-center gap-2">
+                        <Briefcase className="h-5 w-5 text-blue-400" />
+                        Experience
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {linkedinOptimization.profilePreview.experience.slice(0, 3).map((exp, i) => (
+                        <div key={i} className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700">
+                          <div className="flex justify-between items-start">
+                            <div className="flex gap-3">
+                              <div className="w-10 h-10 rounded bg-zinc-700 flex items-center justify-center">
+                                <Briefcase className="h-5 w-5 text-zinc-400" />
+                              </div>
+                              <div>
+                                <h4 className="text-white font-medium">{exp.title}</h4>
+                                <p className="text-zinc-400 text-sm">{exp.company}</p>
+                                <p className="text-zinc-500 text-xs">{exp.duration}</p>
+                                {exp.location && <p className="text-zinc-500 text-xs">{exp.location}</p>}
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-sm text-zinc-400 mb-2">Best Practices:</p>
-                              <ul className="space-y-1 text-sm text-zinc-300">
-                                <li>• Aim for 20-30 relevant skills (LinkedIn allows 50)</li>
-                                <li>• Use official tool names (React, not ReactJS)</li>
-                                <li>• Mirror keywords from target job descriptions</li>
-                                <li>• Request endorsements for top skills</li>
-                                <li>• Pin your 3 most in-demand skills to top</li>
-                              </ul>
-                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => copyToClipboard(`${exp.title} at ${exp.company}\n${exp.duration}\n\n${exp.bullets?.join("\n• ") || ""}`, "Experience")}
+                              className="text-zinc-500 hover:text-white h-6 w-6 p-0"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          {exp.bullets && exp.bullets.length > 0 && (
+                            <ul className="mt-3 space-y-1 text-sm text-zinc-300">
+                              {exp.bullets.slice(0, 4).map((bullet, j) => (
+                                <li key={j} className="flex items-start gap-2">
+                                  <span className="text-blue-400 mt-1">•</span>
+                                  {bullet}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Skills Section Preview */}
+                <Card className="bg-zinc-900/50 backdrop-blur border-zinc-800 shadow-2xl">
+                  <CardHeader className="pb-2">
+                    <div className="flex justify-between items-center">
+                      <CardTitle className="text-white text-lg flex items-center gap-2">
+                        <Award className="h-5 w-5 text-blue-400" />
+                        Skills
+                      </CardTitle>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => copyToClipboard(linkedinOptimization.profilePreview?.skills?.all?.join(", ") || linkedinOptimization.skillsSection?.skills?.join(", ") || "", "All skills")}
+                        className="text-zinc-400 hover:text-white"
+                      >
+                        <Copy className="h-4 w-4 mr-1" /> Copy All
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {/* Featured Skills (Top 3) */}
+                    {linkedinOptimization.profilePreview?.skills?.featured && linkedinOptimization.profilePreview.skills.featured.length > 0 && (
+                      <div className="mb-4">
+                        <p className="text-xs text-zinc-500 mb-2 flex items-center gap-1">
+                          <Star className="h-3 w-3" /> Featured Skills (Pinned to Profile)
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {linkedinOptimization.profilePreview.skills.featured.map((skill, i) => (
+                            <Badge key={i} className="bg-blue-500/30 text-blue-200 border border-blue-500/50">
+                              ★ {skill}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Technical Skills */}
+                    <div className="mb-4">
+                      <p className="text-xs text-zinc-500 mb-2">Technical Skills</p>
+                      <div className="flex flex-wrap gap-2">
+                        {(linkedinOptimization.profilePreview?.skills?.technical || linkedinOptimization.skillsSection?.skills || []).slice(0, 15).map((skill, i) => (
+                          <Badge
+                            key={i}
+                            className={cn(
+                              "transition-all",
+                              i < 5 ? "bg-purple-500/30 text-purple-200" :
+                              i < 10 ? "bg-purple-500/20 text-purple-300" :
+                              "bg-purple-500/10 text-purple-400 border border-purple-500/30"
+                            )}
+                          >
+                            {skill}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Soft Skills */}
+                    {linkedinOptimization.profilePreview?.skills?.soft && linkedinOptimization.profilePreview.skills.soft.length > 0 && (
+                      <div>
+                        <p className="text-xs text-zinc-500 mb-2">Interpersonal Skills</p>
+                        <div className="flex flex-wrap gap-2">
+                          {linkedinOptimization.profilePreview.skills.soft.map((skill, i) => (
+                            <Badge key={i} className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                              {skill}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-zinc-500 mt-4 flex items-center gap-1">
+                      <Info className="h-3 w-3" />
+                      {(linkedinOptimization.profilePreview?.skills?.all?.length || linkedinOptimization.skillsSection?.skills?.length || 0)} skills • LinkedIn allows up to 50 skills
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {/* Education Section Preview */}
+                {linkedinOptimization.profilePreview?.education && linkedinOptimization.profilePreview.education.length > 0 && (
+                  <Card className="bg-zinc-900/50 backdrop-blur border-zinc-800 shadow-2xl">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-white text-lg flex items-center gap-2">
+                        <GraduationCap className="h-5 w-5 text-blue-400" />
+                        Education
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {linkedinOptimization.profilePreview.education.map((edu, i) => (
+                        <div key={i} className="flex gap-3 bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                          <div className="w-10 h-10 rounded bg-zinc-700 flex items-center justify-center">
+                            <GraduationCap className="h-5 w-5 text-zinc-400" />
+                          </div>
+                          <div>
+                            <h4 className="text-white font-medium text-sm">{edu.institution}</h4>
+                            <p className="text-zinc-400 text-sm">{edu.degree}{edu.field ? ` in ${edu.field}` : ""}</p>
+                            {edu.year && <p className="text-zinc-500 text-xs">{edu.year}</p>}
                           </div>
                         </div>
-                      </TabsContent>
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
 
-                      <TabsContent value="tips" className="space-y-4 pt-4">
-                        <div className="space-y-4">
-                          {/* Keyword Optimization - Always show */}
-                          <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-xl">
-                            <h4 className="font-medium text-orange-400 mb-3 flex items-center gap-2">
-                              <Target className="h-4 w-4" />
-                              Keyword Optimization
-                            </h4>
-                            <ul className="space-y-2">
-                              {(linkedinOptimization.tips?.keywordOptimization?.length > 0
-                                ? linkedinOptimization.tips.keywordOptimization
-                                : [
-                                    "Research job descriptions for your target role and mirror their keywords",
-                                    "Include industry-standard terminology in your headline and summary",
-                                    "Use both spelled-out terms and acronyms (e.g., 'Search Engine Optimization (SEO)')"
-                                  ]
-                              ).map((tip: string, i: number) => (
-                                <li key={i} className="text-sm text-zinc-300 flex items-start gap-2">
-                                  <span className="text-orange-400 mt-0.5">•</span>
-                                  {tip}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-
-                          {/* Profile Completeness - Always show */}
-                          <div className="p-4 bg-violet-500/10 border border-violet-500/20 rounded-xl">
-                            <h4 className="font-medium text-violet-400 mb-3 flex items-center gap-2">
-                              <CheckCircle className="h-4 w-4" />
-                              Profile Completeness
-                            </h4>
-                            <ul className="space-y-2">
-                              {(linkedinOptimization.tips?.profileCompleteness?.length > 0
-                                ? linkedinOptimization.tips.profileCompleteness
-                                : [
-                                    "Complete all profile sections - LinkedIn prioritizes complete profiles",
-                                    "Add a professional headshot - profiles with photos get 21x more views",
-                                    "Request recommendations from 2-3 colleagues who can speak to your work",
-                                    "Fill in volunteer experience and causes you care about"
-                                  ]
-                              ).map((tip: string, i: number) => (
-                                <li key={i} className="text-sm text-zinc-300 flex items-start gap-2">
-                                  <span className="text-violet-400 mt-0.5">•</span>
-                                  {tip}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-
-                          {/* Recruiter Visibility - Always show */}
-                          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                            <h4 className="font-medium text-emerald-400 mb-3 flex items-center gap-2">
-                              <TrendingUp className="h-4 w-4" />
-                              Recruiter Search Visibility
-                            </h4>
-                            <ul className="space-y-2">
-                              {(linkedinOptimization.tips?.recruiterVisibility?.length > 0
-                                ? linkedinOptimization.tips.recruiterVisibility
-                                : [
-                                    "Enable 'Open to Work' with 'Recruiters Only' option for discreet job searching",
-                                    "Engage with content weekly to appear in more feeds",
-                                    "Follow companies you'd like to work for",
-                                    "Join relevant industry groups and participate in discussions"
-                                  ]
-                              ).map((tip: string, i: number) => (
-                                <li key={i} className="text-sm text-zinc-300 flex items-start gap-2">
-                                  <span className="text-emerald-400 mt-0.5">•</span>
-                                  {tip}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
-                      </TabsContent>
-                    </Tabs>
+                {/* Tips Card */}
+                <Card className="bg-zinc-900/50 backdrop-blur border-zinc-800 shadow-2xl">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-white text-lg flex items-center gap-2">
+                      <Lightbulb className="h-5 w-5 text-yellow-400" />
+                      Quick Tips to Boost Your Profile
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+                        <h4 className="text-blue-400 font-medium text-sm mb-2 flex items-center gap-1">
+                          <Target className="h-4 w-4" /> Keywords
+                        </h4>
+                        <ul className="text-xs text-zinc-300 space-y-1">
+                          <li>• Use job description keywords</li>
+                          <li>• Include both acronyms & full terms</li>
+                          <li>• Mirror industry terminology</li>
+                        </ul>
+                      </div>
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+                        <h4 className="text-emerald-400 font-medium text-sm mb-2 flex items-center gap-1">
+                          <TrendingUp className="h-4 w-4" /> Visibility
+                        </h4>
+                        <ul className="text-xs text-zinc-300 space-y-1">
+                          <li>• Enable "Open to Work"</li>
+                          <li>• Post/engage weekly</li>
+                          <li>• Join industry groups</li>
+                        </ul>
+                      </div>
+                      <div className="bg-violet-500/10 border border-violet-500/20 rounded-lg p-3">
+                        <h4 className="text-violet-400 font-medium text-sm mb-2 flex items-center gap-1">
+                          <CheckCircle className="h-4 w-4" /> Completeness
+                        </h4>
+                        <ul className="text-xs text-zinc-300 space-y-1">
+                          <li>• Add professional headshot</li>
+                          <li>• Get 2-3 recommendations</li>
+                          <li>• Fill all sections (21x views)</li>
+                        </ul>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
 

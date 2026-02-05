@@ -69,6 +69,7 @@ const upload = multer({
  * - Session ID tracking for data integrity
  */
 router.post("/upload-resume", upload.single("resume"), async (req, res) => {
+  console.log("[DEBUG] Upload route called at:", new Date().toISOString());
   // Default empty result for graceful degradation
   const emptyResult = {
     text: "",
@@ -98,12 +99,32 @@ router.post("/upload-resume", upload.single("resume"), async (req, res) => {
       req.file.originalname
     );
 
-    if (!result.success || !result.text) {
+    // Check if this is an image-based PDF (limited text but not a failure)
+    if (!result.success) {
       console.log("[Assistant] Resume parsing issue (gracefully degrading):", result.error);
       return res.json({
         success: true,
         data: emptyResult,
         message: "Resume uploaded, but text extraction was limited. Please check your file format.",
+      });
+    }
+
+    // For image-based PDFs with very little text, provide helpful message but continue
+    if (result.isImageBasedPDF && (!result.text || result.wordCount < 30)) {
+      console.log("[Assistant] Image-based PDF detected with limited text extraction");
+      return res.json({
+        success: true,
+        data: {
+          text: result.text || "",
+          wordCount: result.wordCount || 0,
+          extractedData: result.extractedData || emptyResult.extractedData,
+          isImageBasedPDF: true,
+        },
+        message: "This PDF appears to be image-based with limited extractable text.",
+        warnings: [{
+          field: "format",
+          message: "For best results, please copy and paste your resume content in the 'About Yourself' section."
+        }],
       });
     }
 
@@ -142,6 +163,19 @@ router.post("/upload-resume", upload.single("resume"), async (req, res) => {
       aiSuggestions = generateBasicSuggestions(result.extractedData, result.text);
     }
 
+    // Determine appropriate message
+    let message = `Resume processed successfully! ${result.wordCount} words extracted.`;
+    let additionalWarnings = [...mismatches];
+
+    // Add warning for image-based PDFs
+    if (result.isImageBasedPDF) {
+      message = "Resume uploaded. This PDF appears to be image-based with limited text extraction.";
+      additionalWarnings.push({
+        field: "format",
+        message: "For best results, please paste your resume content in the 'About Yourself' section, or upload a text-based PDF."
+      });
+    }
+
     // Return parsed data with suggestions
     res.json({
       success: true,
@@ -149,6 +183,7 @@ router.post("/upload-resume", upload.single("resume"), async (req, res) => {
         text: result.text || "",
         wordCount: result.wordCount || 0,
         extractedData: result.extractedData || emptyResult.extractedData,
+        isImageBasedPDF: result.isImageBasedPDF || false,
       },
       suggestions: aiSuggestions ? {
         skills: aiSuggestions.suggestedSkills || [],
@@ -157,8 +192,8 @@ router.post("/upload-resume", upload.single("resume"), async (req, res) => {
         primaryDomain: aiSuggestions.primaryDomain,
         aiGenerated: true
       } : undefined,
-      message: `Resume processed successfully! ${result.wordCount} words extracted.`,
-      warnings: mismatches.length > 0 ? mismatches : undefined,
+      message: message,
+      warnings: additionalWarnings.length > 0 ? additionalWarnings : undefined,
       sessionCleared: sessionId ? true : undefined,
     });
   } catch (error) {
@@ -377,7 +412,7 @@ router.post("/download-cv", async (req, res) => {
  */
 router.post("/optimize-linkedin", async (req, res) => {
   try {
-    const { profileAnalysis, currentLinkedin, userInfo } = req.body;
+    const { profileAnalysis, currentLinkedin, userInfo, cvData } = req.body;
 
     if (!profileAnalysis) {
       return res.status(400).json({
@@ -390,6 +425,7 @@ router.post("/optimize-linkedin", async (req, res) => {
       profileAnalysis,
       currentLinkedin,
       userInfo,
+      cvData, // Pass CV data for experience, education, etc.
     });
 
     res.json({
