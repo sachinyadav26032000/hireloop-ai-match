@@ -98,33 +98,61 @@ If a bullet already has numbers/metrics, preserve them exactly.`;
 
 /**
  * Parse resume text to extract structured experience
+ * Simpler fallback parser for basic resume formats
  */
 function parseResumeForExperience(resumeText) {
   if (!resumeText || resumeText.length < 50) return [];
 
-  // Simple extraction - look for common patterns
   const experience = [];
-  const sections = resumeText.split(/(?:experience|work history|employment)/i);
 
-  if (sections.length > 1) {
-    const expSection = sections[1].split(/(?:education|skills|certifications|projects)/i)[0];
+  // Multiple patterns to find job entries
+  const jobPatterns = [
+    // Pattern: Title at Company (2020 - 2023)
+    /([A-Z][a-zA-Z\s]+(?:Engineer|Developer|Manager|Analyst|Lead|Head|Director|Executive|Specialist|Consultant|Designer|Architect))\s+(?:at|@)\s+([A-Z][a-zA-Z\s&.,]+?)[\s,]*\(?\s*(\d{4})\s*[-–to]+\s*(\d{4}|present|current)/gi,
 
-    // Look for job entries (Company - Title patterns)
-    const jobPattern = /([A-Z][a-zA-Z\s&]+)\s*[-–|]\s*([A-Za-z\s]+)\s*(?:\()?(\d{4}|\w+\s*\d{4})\s*[-–to]+\s*(\d{4}|present|current)?/gi;
+    // Pattern: Company | Title | Date
+    /([A-Z][a-zA-Z\s&.,]+?)\s*[|•]\s*([A-Z][a-zA-Z\s]+)\s*[|•]?\s*(\d{4})\s*[-–to]+\s*(\d{4}|present|current)/gi,
+
+    // Pattern: Title - Company (Date)
+    /([A-Z][a-zA-Z\s]+)\s*[-–]\s*([A-Z][a-zA-Z\s&.,]+?)\s*\(?\s*(\d{4})\s*[-–to]+\s*(\d{4}|present|current)\)?/gi,
+
+    // Pattern: Company\nTitle\nDate
+    /([A-Z][a-zA-Z\s&.,]+(?:Ltd|Inc|Corp|LLC|Pvt|Limited)?\.?)\s*\n\s*([A-Z][a-zA-Z\s]+)\s*\n?\s*(\d{4})\s*[-–to]+\s*(\d{4}|present|current)/gi,
+  ];
+
+  for (const pattern of jobPatterns) {
     let match;
-
-    while ((match = jobPattern.exec(expSection)) !== null) {
-      experience.push({
-        company: match[1].trim(),
-        title: match[2].trim(),
+    while ((match = pattern.exec(resumeText)) !== null) {
+      const entry = {
+        company: match[2]?.trim() || match[1]?.trim() || "",
+        title: match[1]?.trim() || match[2]?.trim() || "",
         duration: `${match[3]} - ${match[4] || "Present"}`,
         location: "",
         bullets: []
-      });
+      };
+
+      // Determine which is title vs company
+      const titleWords = ["engineer", "developer", "manager", "analyst", "lead", "head", "director", "specialist", "consultant", "designer", "architect"];
+      const companyWords = ["ltd", "inc", "corp", "llc", "pvt", "limited", "solutions", "technologies", "services"];
+
+      if (companyWords.some(w => entry.title.toLowerCase().includes(w))) {
+        // Swap title and company
+        const temp = entry.title;
+        entry.title = entry.company;
+        entry.company = temp;
+      }
+
+      // Only add if we have either title or company
+      if ((entry.title || entry.company) && !experience.some(e =>
+        e.title.toLowerCase() === entry.title.toLowerCase() &&
+        e.company.toLowerCase() === entry.company.toLowerCase()
+      )) {
+        experience.push(entry);
+      }
     }
   }
 
-  return experience;
+  return experience.slice(0, 5);
 }
 
 /**
@@ -272,7 +300,350 @@ IMPORTANT INSTRUCTIONS:
 }
 
 /**
- * Generate basic CV without AI (fallback)
+ * Action verbs for bullet point enhancement
+ */
+const ACTION_VERBS = {
+  leadership: ["Led", "Directed", "Managed", "Oversaw", "Coordinated", "Spearheaded", "Championed"],
+  achievement: ["Achieved", "Delivered", "Accomplished", "Exceeded", "Surpassed", "Attained"],
+  creation: ["Developed", "Created", "Built", "Designed", "Established", "Launched", "Implemented"],
+  improvement: ["Improved", "Enhanced", "Optimized", "Streamlined", "Transformed", "Modernized"],
+  analysis: ["Analyzed", "Evaluated", "Assessed", "Identified", "Researched", "Investigated"],
+  collaboration: ["Collaborated", "Partnered", "Facilitated", "Negotiated", "Liaised"]
+};
+
+/**
+ * Enhance bullet points with action verbs
+ */
+function enhanceBulletPoints(bullets) {
+  if (!bullets || bullets.length === 0) return [];
+
+  return bullets.map(bullet => {
+    const trimmed = bullet.trim();
+
+    // Already starts with a strong verb
+    const allVerbs = Object.values(ACTION_VERBS).flat();
+    if (allVerbs.some(v => trimmed.startsWith(v))) {
+      return trimmed;
+    }
+
+    // Common weak starts to transform
+    const weakStarts = [
+      { pattern: /^responsible for\s*/i, replacement: "Managed " },
+      { pattern: /^worked on\s*/i, replacement: "Developed " },
+      { pattern: /^helped with\s*/i, replacement: "Contributed to " },
+      { pattern: /^involved in\s*/i, replacement: "Participated in " },
+      { pattern: /^assisted\s*/i, replacement: "Supported " },
+      { pattern: /^was part of\s*/i, replacement: "Collaborated on " },
+      { pattern: /^handled\s*/i, replacement: "Managed " },
+      { pattern: /^did\s*/i, replacement: "Executed " },
+      { pattern: /^made\s*/i, replacement: "Created " }
+    ];
+
+    for (const { pattern, replacement } of weakStarts) {
+      if (pattern.test(trimmed)) {
+        return trimmed.replace(pattern, replacement);
+      }
+    }
+
+    // If no weak start found, prepend an appropriate verb
+    if (/team|group|department/i.test(trimmed)) {
+      return `Led ${trimmed.charAt(0).toLowerCase() + trimmed.slice(1)}`;
+    }
+    if (/system|application|feature|tool/i.test(trimmed)) {
+      return `Developed ${trimmed.charAt(0).toLowerCase() + trimmed.slice(1)}`;
+    }
+    if (/process|workflow|efficiency/i.test(trimmed)) {
+      return `Optimized ${trimmed.charAt(0).toLowerCase() + trimmed.slice(1)}`;
+    }
+
+    return trimmed;
+  });
+}
+
+/**
+ * Parse experience from resume text more thoroughly
+ * Enhanced to handle various resume formats including:
+ * - Multi-column layouts
+ * - Different date formats
+ * - Various bullet point styles
+ */
+function parseExperienceDetailed(resumeText) {
+  if (!resumeText || resumeText.length < 50) return [];
+
+  const experience = [];
+  const lines = resumeText.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+
+  // Multiple patterns to detect experience section
+  const expSectionPatterns = [
+    /^(work\s*)?experience$/i,
+    /^employment(\s*history)?$/i,
+    /^professional\s*(experience|background|history)$/i,
+    /^career\s*(history|summary)$/i,
+    /^work\s*history$/i,
+  ];
+
+  const endSectionPatterns = [
+    /^education$/i,
+    /^skills$/i,
+    /^technical\s*skills$/i,
+    /^certifications?$/i,
+    /^projects?$/i,
+    /^awards?$/i,
+    /^achievements?$/i,
+    /^languages?$/i,
+    /^interests?$/i,
+    /^references?$/i,
+    /^personal\s*(details|information)?$/i,
+  ];
+
+  // Date patterns for job entries
+  const datePatterns = [
+    /(\d{4})\s*[-–to]+\s*(\d{4}|present|current|now|ongoing)/i,
+    /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[\s,]*(\d{4})\s*[-–to]+\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)?[a-z]*[\s,]*(\d{4}|present|current|now)/i,
+    /(\d{1,2}\/\d{4})\s*[-–to]+\s*(\d{1,2}\/\d{4}|present|current)/i,
+    /(since|from)\s*(\d{4})/i,
+  ];
+
+  let inExperienceSection = false;
+  let currentJob = null;
+  let bullets = [];
+
+  // First pass: find experience section start
+  let expStartIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (expSectionPatterns.some(p => p.test(line))) {
+      expStartIndex = i;
+      inExperienceSection = true;
+      break;
+    }
+  }
+
+  // If no explicit section header, try to find job entries directly
+  if (expStartIndex === -1) {
+    // Look for lines that have job-like patterns (title + company + date)
+    for (let i = 0; i < Math.min(lines.length, 30); i++) {
+      const line = lines[i];
+      const hasDate = datePatterns.some(p => p.test(line));
+      const hasJobIndicator = /\b(at|@|•|\|)\b/i.test(line) ||
+                              /\b(pvt|ltd|inc|corp|llc|company|limited)\b/i.test(line);
+      if (hasDate && (hasJobIndicator || line.length > 20)) {
+        expStartIndex = Math.max(0, i - 1);
+        inExperienceSection = true;
+        break;
+      }
+    }
+  }
+
+  // Start from experience section or beginning
+  const startIdx = expStartIndex >= 0 ? expStartIndex : 0;
+
+  for (let i = startIdx; i < lines.length; i++) {
+    const line = lines[i];
+    const lineLower = line.toLowerCase();
+
+    // Skip the section header itself
+    if (expSectionPatterns.some(p => p.test(line))) {
+      inExperienceSection = true;
+      continue;
+    }
+
+    // Detect end of experience section
+    if (inExperienceSection && endSectionPatterns.some(p => p.test(line))) {
+      if (currentJob) {
+        currentJob.bullets = enhanceBulletPoints(bullets);
+        if (currentJob.title || currentJob.company) {
+          experience.push(currentJob);
+        }
+      }
+      break;
+    }
+
+    // Check if this line contains a date (potential job entry)
+    let dateMatch = null;
+    for (const pattern of datePatterns) {
+      const match = line.match(pattern);
+      if (match) {
+        dateMatch = match;
+        break;
+      }
+    }
+
+    // Also check next line for date (some resumes put date on separate line)
+    let nextLineHasDate = false;
+    if (i + 1 < lines.length) {
+      nextLineHasDate = datePatterns.some(p => p.test(lines[i + 1]));
+    }
+
+    // Detect job entry (has date or looks like job title)
+    const isJobTitle = /\b(engineer|developer|manager|analyst|executive|director|consultant|specialist|lead|head|architect|designer|coordinator|officer|president|vp|ceo|cto|cfo)\b/i.test(line);
+
+    if ((dateMatch || (isJobTitle && nextLineHasDate)) && line.length > 5 && line.length < 200) {
+      // Save previous job
+      if (currentJob) {
+        currentJob.bullets = enhanceBulletPoints(bullets);
+        if (currentJob.title || currentJob.company) {
+          experience.push(currentJob);
+        }
+        bullets = [];
+      }
+
+      // Parse job entry - various formats
+      // Format 1: "Title at Company • Location | Date"
+      // Format 2: "Title | Company | Date"
+      // Format 3: "Company - Title (Date)"
+      // Format 4: "Title" on one line, "Company" on next
+
+      let title = "";
+      let company = "";
+      let location = "";
+      let duration = "";
+
+      // Extract duration from date match
+      if (dateMatch) {
+        const fullMatch = dateMatch[0];
+        duration = fullMatch.replace(/[-–]+/g, " - ").trim();
+        // Remove date from line for further parsing
+        const lineWithoutDate = line.replace(fullMatch, "").trim();
+
+        // Parse remaining text
+        const parts = lineWithoutDate.split(/\s*[•|@]\s*|\s+at\s+|\s*[-–]\s*/i).filter(p => p.trim());
+
+        if (parts.length >= 2) {
+          // Check which part is title vs company
+          const firstIsTitle = /\b(engineer|developer|manager|analyst|lead|head|director|specialist)\b/i.test(parts[0]);
+          if (firstIsTitle) {
+            title = parts[0].trim();
+            company = parts[1].trim();
+            if (parts[2]) location = parts[2].trim();
+          } else {
+            // Could be company first
+            company = parts[0].trim();
+            title = parts[1].trim();
+          }
+        } else if (parts.length === 1) {
+          // Just one part - likely title, check next line for company
+          title = parts[0].trim();
+          if (i + 1 < lines.length && !datePatterns.some(p => p.test(lines[i + 1]))) {
+            company = lines[i + 1].trim().split(/\s*[•|]\s*/)[0];
+          }
+        }
+      } else if (isJobTitle) {
+        title = line.trim();
+        // Look at next lines for company and date
+        if (i + 1 < lines.length) {
+          const nextLine = lines[i + 1];
+          const nextDateMatch = datePatterns.find(p => p.test(nextLine));
+          if (nextDateMatch) {
+            duration = nextLine.match(nextDateMatch)?.[0] || "";
+            company = nextLine.replace(duration, "").trim().split(/\s*[•|]\s*/)[0];
+          } else {
+            company = nextLine.trim().split(/\s*[•|]\s*/)[0];
+          }
+        }
+      }
+
+      // Clean up extracted values
+      title = title.replace(/[•|,].*$/, "").trim();
+      company = company.replace(/[,]?\s*(pvt|ltd|inc|corp|llc|limited)\.?/gi, "").trim();
+      company = company.replace(/\s*[•|]\s*.*$/, "").trim();
+
+      currentJob = {
+        title: title || line.split(/\s*[-–|•@]\s*/)[0]?.trim() || "",
+        company: company,
+        duration: duration,
+        location: location,
+        bullets: []
+      };
+
+      inExperienceSection = true;
+    } else if (currentJob || inExperienceSection) {
+      // Check if this is a bullet point
+      const isBullet = /^[•●○■▪►▸\-\*]\s*/.test(line) || /^\d+[.)]\s*/.test(line);
+      const isLongEnough = line.length >= 15;
+      const isNotHeader = !expSectionPatterns.some(p => p.test(line)) &&
+                          !endSectionPatterns.some(p => p.test(line));
+      const isNotEmail = !line.includes("@");
+      const isNotPhone = !/^\+?\d[\d\s\-()]{8,}$/.test(line);
+
+      if ((isBullet || (isLongEnough && line.length < 300)) && isNotHeader && isNotEmail && isNotPhone) {
+        const cleanBullet = line.replace(/^[•●○■▪►▸\-\*]\s*/, "").replace(/^\d+[.)]\s*/, "").trim();
+        if (cleanBullet.length >= 15 && cleanBullet.length < 300) {
+          bullets.push(cleanBullet);
+        }
+      }
+
+      // Also check if this could be a company name for current job (on separate line)
+      if (currentJob && !currentJob.company && !isBullet && line.length > 3 && line.length < 100) {
+        const couldBeCompany = /\b(pvt|ltd|inc|corp|llc|company|limited|solutions|technologies|services|consulting)\b/i.test(line) ||
+                               /^[A-Z][a-z]+\s+[A-Z]/.test(line);
+        if (couldBeCompany) {
+          currentJob.company = line.split(/\s*[•|]\s*/)[0].trim();
+        }
+      }
+    }
+  }
+
+  // Don't forget the last job
+  if (currentJob) {
+    currentJob.bullets = enhanceBulletPoints(bullets);
+    if (currentJob.title || currentJob.company) {
+      experience.push(currentJob);
+    }
+  }
+
+  // Deduplicate and clean
+  const uniqueExperience = [];
+  const seen = new Set();
+  for (const exp of experience) {
+    const key = `${exp.title.toLowerCase()}-${exp.company.toLowerCase()}`;
+    if (!seen.has(key) && (exp.title || exp.company)) {
+      seen.add(key);
+      uniqueExperience.push(exp);
+    }
+  }
+
+  console.log(`[CV Generation] Extracted ${uniqueExperience.length} experience entries`);
+  return uniqueExperience.slice(0, 6); // Max 6 positions
+}
+
+/**
+ * Generate professional summary based on profile
+ */
+function generateProfessionalSummary(data) {
+  const { targetRole, skills, experienceLevel, years, selfDescription, parsedExperience } = data;
+  const levelCapitalized = experienceLevel.charAt(0).toUpperCase() + experienceLevel.slice(1);
+  const topSkills = skills.slice(0, 3);
+
+  // Extract any metrics from experience
+  const allBullets = parsedExperience?.flatMap(e => e.bullets || []).join(" ") || "";
+  const hasMetrics = /\d+%|\$\d|increased|improved|reduced|grew/i.test(allBullets);
+
+  if (!targetRole || !topSkills.length) {
+    if (selfDescription && selfDescription.length > 50) {
+      return selfDescription.slice(0, 350) + (selfDescription.length > 350 ? "..." : "");
+    }
+    return "Dedicated professional with a proven track record of delivering results. Committed to excellence and continuous improvement.";
+  }
+
+  const templates = [
+    // Template 1: Classic professional
+    `${levelCapitalized}-level ${targetRole} with ${years ? `${years}+ years of` : "demonstrated"} experience in ${topSkills.slice(0, 2).join(" and ")}. ${hasMetrics ? "Proven track record of delivering measurable results and driving business impact." : "Passionate about delivering high-quality solutions and driving team success."} Seeking opportunities to leverage expertise in ${topSkills[0]} to contribute to innovative projects.`,
+
+    // Template 2: Achievement-focused
+    `Results-driven ${targetRole} specializing in ${topSkills.join(", ")}. ${years ? `With ${years}+ years in the industry, brings` : "Brings"} deep expertise in building scalable solutions and leading cross-functional initiatives. ${hasMetrics ? "Consistently exceeds targets and delivers value." : "Committed to excellence and continuous learning."}`,
+
+    // Template 3: Value proposition
+    `Dynamic ${levelCapitalized.toLowerCase()}-level ${targetRole} combining technical proficiency in ${topSkills.slice(0, 2).join(" and ")} with strong problem-solving abilities. ${years ? `${years}+ years of experience` : "Solid experience"} translating complex requirements into effective solutions. Eager to drive innovation and growth.`
+  ];
+
+  // Choose template based on data richness
+  const templateIndex = (skills.length > 5 && years > 3) ? 1 : (years > 0 ? 0 : 2);
+  return templates[templateIndex];
+}
+
+/**
+ * Generate professional CV without AI (intelligent fallback)
  */
 function generateBasicCV(data) {
   const {
@@ -281,17 +652,58 @@ function generateBasicCV(data) {
     parsedExperience, parsedEducation, certifications, selfDescription
   } = data;
 
-  // Generate basic summary
-  let summary = "";
-  if (targetRole && skills.length > 0) {
-    const topSkills = skills.slice(0, 3).join(", ");
-    if (years > 0) {
-      summary = `${experienceLevel.charAt(0).toUpperCase() + experienceLevel.slice(1)}-level ${targetRole} with ${years}+ years of experience. Core expertise in ${topSkills}. Seeking opportunities to drive impact and growth.`;
-    } else {
-      summary = `Aspiring ${targetRole} with skills in ${topSkills}. Eager to contribute and grow in a dynamic environment.`;
-    }
-  } else if (selfDescription) {
-    summary = selfDescription.slice(0, 300);
+  // Generate professional summary
+  const summary = generateProfessionalSummary(data);
+
+  // Enhance experience bullets
+  const enhancedExperience = (parsedExperience || []).map(job => ({
+    ...job,
+    bullets: enhanceBulletPoints(job.bullets || [])
+  }));
+
+  // Calculate ATS score
+  const atsScore = calculateBasicATSScore(data);
+
+  // Generate role-specific keywords
+  const roleKeywords = {
+    "Software Engineer": ["software development", "programming", "agile", "code review"],
+    "Frontend Developer": ["responsive design", "UI/UX", "web performance", "accessibility"],
+    "Backend Developer": ["API development", "database design", "scalability", "microservices"],
+    "Data Scientist": ["data modeling", "statistical analysis", "machine learning", "visualization"],
+    "Product Manager": ["product strategy", "roadmap", "stakeholder management", "user research"],
+    "DevOps Engineer": ["CI/CD", "infrastructure", "automation", "monitoring"],
+    "Project Manager": ["project delivery", "risk management", "resource planning", "agile/scrum"]
+  };
+
+  const additionalKeywords = roleKeywords[targetRole] || ["professional", "results-driven", "collaborative"];
+  const atsKeywords = [...skills.slice(0, 6), ...additionalKeywords.slice(0, 2)].filter(Boolean);
+
+  // Generate specific improvements based on data
+  const improvements = [];
+  if (enhancedExperience.length === 0) {
+    improvements.push("Add your work experience with specific achievements and responsibilities");
+  } else if (enhancedExperience.every(e => !e.bullets?.length)) {
+    improvements.push("Add bullet points describing your key achievements at each position");
+  }
+  if (skills.length < 5) {
+    improvements.push("Include more relevant technical skills for your target role");
+  }
+  if (!parsedEducation?.length) {
+    improvements.push("Add your educational background");
+  }
+  if (improvements.length === 0) {
+    improvements.push("Consider adding certifications relevant to " + (targetRole || "your field"));
+    improvements.push("Quantify more achievements with specific numbers and percentages");
+  }
+
+  // VALIDATION: Only add default soft skills if there's actual resume content
+  // This prevents "hallucinating" skills for empty or very short uploads
+  const hasActualContent = (skills.length > 0 || parsedExperience?.length > 0);
+
+  let cvSoftSkills = softSkills || [];
+  if (cvSoftSkills.length === 0 && hasActualContent) {
+    // Only add default soft skills if we have actual resume content
+    cvSoftSkills = ["Communication", "Problem Solving", "Teamwork"];
   }
 
   return {
@@ -302,24 +714,23 @@ function generateBasicCV(data) {
     location,
     linkedin,
     summary,
-    experience: parsedExperience || [],
-    hasExperienceData: (parsedExperience || []).length > 0,
+    experience: enhancedExperience,
+    hasExperienceData: enhancedExperience.length > 0,
     skills: {
       technical: skills,
-      soft: softSkills
+      soft: cvSoftSkills
     },
     education: parsedEducation || [],
     certifications: certifications || [],
-    atsScore: calculateBasicATSScore(data),
-    atsKeywords: [...skills.slice(0, 6), targetRole].filter(Boolean),
-    improvements: [
-      "Configure OPENAI_API_KEY for AI-enhanced CV generation",
-      "Add quantifiable achievements to your experience",
-      "Include relevant keywords for your target role",
-      "Ensure your summary highlights your unique value proposition"
-    ],
+    atsScore,
+    atsKeywords,
+    improvements,
     aiPowered: false,
-    warning: "Basic CV generated without AI. Set OPENAI_API_KEY for professional AI-enhanced CV."
+    generationMethod: "intelligent-rule-based",
+    dataSource: {
+      note: "CV generated using intelligent analysis of your profile data.",
+      aiEnhanced: false
+    }
   };
 }
 
