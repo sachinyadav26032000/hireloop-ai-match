@@ -457,4 +457,18 @@ export const assistantApi = {
   async getJobs() {
     return apiCall<{ success: boolean; data: JobMatch["job"][] }>("/assistant/jobs");
   },
+
+  /**
+   * Improve a LinkedIn section using AI
+   */
+  async improveSection(
+    section: string,
+    content: string,
+    context: { role?: string; skills?: string[]; experience?: number }
+  ) {
+    return apiCall<{ success: boolean; data: { improved: string; original: string } }>("/assistant/improve-section", {
+      method: "POST",
+      body: JSON.stringify({ section, content, context }),
+    });
+  },
 };
