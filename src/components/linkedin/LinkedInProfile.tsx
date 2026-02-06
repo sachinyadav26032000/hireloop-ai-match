@@ -237,6 +237,23 @@ function buildProfileFromData(
   };
 }
 
+// LinkedIn Brand Colors
+const linkedinColors = {
+  primary: "#0077B5",       // LinkedIn Blue
+  primaryHover: "#006097",  // Darker blue for hover
+  primaryLight: "#70b5f9",  // Light blue for accents
+  black: "#000000",
+  white: "#FFFFFF",
+  background: "#F4F2EE",    // LinkedIn page background
+  cardBg: "#FFFFFF",        // White card background
+  border: "#E0E0E0",        // Card borders
+  textPrimary: "#000000",   // Main text
+  textSecondary: "#666666", // Secondary text
+  textTertiary: "#00000099", // Muted text
+  success: "#057642",       // Green for #OpenToWork
+  successBg: "#DDF5E9",     // Light green background
+};
+
 // Editable Field Component
 function EditableField({
   value,
@@ -271,21 +288,23 @@ function EditableField({
           <Textarea
             value={tempValue}
             onChange={(e) => setTempValue(e.target.value)}
-            className={cn("flex-1 bg-zinc-800 border-zinc-600 text-white min-h-[100px]", className)}
+            className={cn("flex-1 min-h-[100px] border-[#0077B5] focus:border-[#0077B5] focus:ring-[#0077B5] bg-white text-black", className)}
+            style={{ borderColor: linkedinColors.primary }}
             autoFocus
           />
         ) : (
           <Input
             value={tempValue}
             onChange={(e) => setTempValue(e.target.value)}
-            className={cn("flex-1 bg-zinc-800 border-zinc-600 text-white", className)}
+            className={cn("flex-1 border-[#0077B5] focus:border-[#0077B5] focus:ring-[#0077B5] bg-white text-black", className)}
+            style={{ borderColor: linkedinColors.primary }}
             autoFocus
           />
         )}
-        <Button size="sm" variant="ghost" onClick={handleSave} className="text-emerald-400">
+        <Button size="sm" variant="ghost" onClick={handleSave} className="text-[#057642] hover:bg-[#DDF5E9]">
           <Check className="h-4 w-4" />
         </Button>
-        <Button size="sm" variant="ghost" onClick={handleCancel} className="text-red-400">
+        <Button size="sm" variant="ghost" onClick={handleCancel} className="text-red-600 hover:bg-red-50">
           <X className="h-4 w-4" />
         </Button>
       </div>
@@ -295,15 +314,15 @@ function EditableField({
   return (
     <div
       className={cn(
-        "group flex items-start gap-2 cursor-pointer hover:bg-zinc-800/50 rounded px-2 py-1 -mx-2 -my-1 transition-colors",
+        "group flex items-start gap-2 cursor-pointer hover:bg-[#F4F2EE] rounded px-2 py-1 -mx-2 -my-1 transition-colors",
         className
       )}
       onClick={() => setEditing(true)}
     >
-      <span className={cn("flex-1", !value && "text-zinc-500 italic")}>
+      <span className={cn("flex-1", !value && "text-[#666666] italic")}>
         {value || placeholder}
       </span>
-      <Pencil className="h-4 w-4 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+      <Pencil className="h-4 w-4 text-[#666666] opacity-0 group-hover:opacity-100 transition-opacity" />
     </div>
   );
 }
@@ -424,11 +443,11 @@ export function LinkedInProfile({
 
   if (!hasData) {
     return (
-      <Card className="bg-zinc-900/50 border-zinc-800">
+      <Card className="bg-white border-[#E0E0E0] shadow-sm">
         <CardContent className="py-12 text-center">
-          <Linkedin className="h-12 w-12 mx-auto mb-4 text-zinc-600" />
-          <h3 className="text-lg font-medium text-zinc-300 mb-2">No Profile Data Available</h3>
-          <p className="text-zinc-500 text-sm">
+          <Linkedin className="h-12 w-12 mx-auto mb-4 text-[#0077B5]" />
+          <h3 className="text-lg font-medium text-[#000000] mb-2">No Profile Data Available</h3>
+          <p className="text-[#666666] text-sm">
             Upload a resume or fill in your details to generate your LinkedIn profile.
           </p>
         </CardContent>
@@ -437,33 +456,35 @@ export function LinkedInProfile({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2" style={{ backgroundColor: linkedinColors.background, padding: '8px', borderRadius: '8px' }}>
       {/* LinkedIn Header Card */}
-      <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
-        {/* Banner */}
-        <div className="h-28 bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 relative">
+      <Card className="bg-white border-[#E0E0E0] overflow-hidden shadow-sm rounded-lg">
+        {/* Banner - LinkedIn style gradient */}
+        <div className="h-[120px] relative" style={{ background: 'linear-gradient(135deg, #0077B5 0%, #00A0DC 50%, #70B5F9 100%)' }}>
           {profile.openToWork && (
-            <Badge className="absolute top-3 right-3 bg-emerald-500 text-white border-0">
-              #OpenToWork
-            </Badge>
+            <div className="absolute top-3 right-3 flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold"
+              style={{ backgroundColor: linkedinColors.successBg, color: linkedinColors.success }}>
+              <span className="text-xs">🟢</span> #OpenToWork
+            </div>
           )}
         </div>
 
         {/* Profile Info */}
         <div className="px-6 pb-6 relative">
-          {/* Avatar */}
+          {/* Avatar - LinkedIn style with border */}
           <div className="absolute -top-16 left-6">
-            <div className="w-32 h-32 rounded-full border-4 border-zinc-900 bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-xl">
-              <span className="text-white text-4xl font-bold">
+            <div className="w-[152px] h-[152px] rounded-full border-4 border-white flex items-center justify-center shadow-lg"
+              style={{ background: 'linear-gradient(135deg, #0077B5 0%, #00A0DC 100%)' }}>
+              <span className="text-white text-5xl font-semibold" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
                 {profile.name?.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() || "?"}
               </span>
             </div>
           </div>
 
           {/* Name and Headline */}
-          <div className="pt-20 space-y-2">
+          <div className="pt-24 space-y-1">
             <div className="flex items-center justify-between">
-              <h1 className="text-2xl font-bold text-white">
+              <h1 className="text-2xl font-semibold" style={{ color: linkedinColors.textPrimary, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
                 <EditableField
                   value={profile.name}
                   onChange={(name) => updateProfile({ name })}
@@ -474,7 +495,7 @@ export function LinkedInProfile({
                 size="sm"
                 variant="ghost"
                 onClick={() => copyToClipboard(profile.name, "Name")}
-                className="text-zinc-400"
+                className="text-[#666666] hover:bg-[#F4F2EE]"
               >
                 <Copy className="h-4 w-4" />
               </Button>
@@ -486,7 +507,7 @@ export function LinkedInProfile({
                   value={profile.headline}
                   onChange={(headline) => updateProfile({ headline })}
                   placeholder="Add a professional headline"
-                  className="text-zinc-300"
+                  className="text-[#000000]"
                 />
               </div>
               <Button
@@ -494,7 +515,7 @@ export function LinkedInProfile({
                 variant="ghost"
                 onClick={() => handleImprove("headline", profile.headline)}
                 disabled={improvingSection === "headline"}
-                className="text-violet-400 hover:text-violet-300"
+                className="text-[#0077B5] hover:bg-[#E7F3FF]"
               >
                 <Sparkles className="h-4 w-4 mr-1" />
                 {improvingSection === "headline" ? "..." : "Improve"}
@@ -503,58 +524,69 @@ export function LinkedInProfile({
                 size="sm"
                 variant="ghost"
                 onClick={() => copyToClipboard(profile.headline, "Headline")}
-                className="text-zinc-400"
+                className="text-[#666666] hover:bg-[#F4F2EE]"
               >
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
 
-            {/* Contact Info Row */}
-            <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-400 mt-3">
+            {/* Contact Info Row - LinkedIn style */}
+            <div className="flex flex-wrap items-center gap-4 text-sm mt-2" style={{ color: linkedinColors.textSecondary }}>
               {profile.location && (
                 <span className="flex items-center gap-1">
                   <MapPin className="h-4 w-4" />
                   {profile.location}
                 </span>
               )}
-              <span className="flex items-center gap-1">
-                <Users className="h-4 w-4" />
+              <span className="flex items-center gap-1 text-[#0077B5] font-medium hover:underline cursor-pointer">
                 {profile.connections} connections
               </span>
-              {profile.email && (
-                <span className="flex items-center gap-1">
-                  <Mail className="h-4 w-4" />
-                  {profile.email}
-                </span>
-              )}
-              {profile.phone && (
-                <span className="flex items-center gap-1">
-                  <Phone className="h-4 w-4" />
-                  {profile.phone}
-                </span>
-              )}
             </div>
 
-            {/* Action Buttons */}
+            {/* Contact info link - LinkedIn style */}
+            <div className="text-sm font-semibold" style={{ color: linkedinColors.primary }}>
+              <span className="hover:underline cursor-pointer">Contact info</span>
+            </div>
+
+            {/* Action Buttons - LinkedIn style */}
             <div className="flex gap-2 mt-4">
-              <Button className="bg-blue-600 hover:bg-blue-500 text-white">
+              <Button
+                className="rounded-full font-semibold px-4 text-white"
+                style={{ backgroundColor: linkedinColors.primary }}
+              >
                 <Linkedin className="h-4 w-4 mr-2" />
-                Open to Work
+                Open to
               </Button>
-              <Button variant="outline" className="border-zinc-600 text-zinc-300">
-                <Mail className="h-4 w-4 mr-2" />
-                Contact Info
+              <Button
+                className="rounded-full font-semibold px-4 border-2"
+                style={{
+                  backgroundColor: 'transparent',
+                  borderColor: linkedinColors.primary,
+                  color: linkedinColors.primary
+                }}
+              >
+                Add profile section
+              </Button>
+              <Button
+                className="rounded-full font-semibold px-4 border-2"
+                style={{
+                  backgroundColor: 'transparent',
+                  borderColor: linkedinColors.textSecondary,
+                  color: linkedinColors.textSecondary
+                }}
+              >
+                More
               </Button>
             </div>
           </div>
         </div>
       </Card>
 
-      {/* About Section */}
-      <Card className="bg-zinc-900 border-zinc-800">
+      {/* About Section - LinkedIn style */}
+      <Card className="bg-white border-[#E0E0E0] shadow-sm rounded-lg">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-white text-lg flex items-center gap-2">
+            <CardTitle className="text-xl font-semibold flex items-center gap-2" style={{ color: linkedinColors.textPrimary }}>
               About
             </CardTitle>
             <div className="flex gap-2">
@@ -563,7 +595,7 @@ export function LinkedInProfile({
                 variant="ghost"
                 onClick={() => handleImprove("about", profile.about)}
                 disabled={improvingSection === "about"}
-                className="text-violet-400 hover:text-violet-300"
+                className="text-[#0077B5] hover:bg-[#E7F3FF]"
               >
                 <Sparkles className="h-4 w-4 mr-1" />
                 {improvingSection === "about" ? "Improving..." : "Improve with AI"}
@@ -572,7 +604,7 @@ export function LinkedInProfile({
                 size="sm"
                 variant="ghost"
                 onClick={() => copyToClipboard(profile.about, "About section")}
-                className="text-zinc-400"
+                className="text-[#666666] hover:bg-[#F4F2EE]"
               >
                 <Copy className="h-4 w-4" />
               </Button>
@@ -589,10 +621,11 @@ export function LinkedInProfile({
               onChange={(about) => updateProfile({ about })}
               placeholder="Write about yourself - your experience, expertise, and what drives you"
               multiline
-              className="text-zinc-300 text-sm whitespace-pre-line leading-relaxed"
+              className="text-sm whitespace-pre-line leading-relaxed"
+              style={{ color: linkedinColors.textPrimary }}
             />
             {!expandedAbout && profile.about.length > 300 && (
-              <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-zinc-900 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white to-transparent" />
             )}
           </div>
           {profile.about.length > 300 && (
@@ -600,7 +633,7 @@ export function LinkedInProfile({
               variant="ghost"
               size="sm"
               onClick={() => setExpandedAbout(!expandedAbout)}
-              className="text-blue-400 mt-2 p-0 h-auto"
+              className="text-[#0077B5] mt-2 p-0 h-auto font-semibold hover:underline"
             >
               {expandedAbout ? (
                 <>...see less <ChevronUp className="h-4 w-4 ml-1" /></>
@@ -609,18 +642,17 @@ export function LinkedInProfile({
               )}
             </Button>
           )}
-          <p className="text-xs text-zinc-500 mt-2">
+          <p className="text-xs mt-2" style={{ color: linkedinColors.textSecondary }}>
             {profile.about.length} / 2,600 characters
           </p>
         </CardContent>
       </Card>
 
-      {/* Experience Section */}
-      <Card className="bg-zinc-900 border-zinc-800">
+      {/* Experience Section - LinkedIn style */}
+      <Card className="bg-white border-[#E0E0E0] shadow-sm rounded-lg">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-white text-lg flex items-center gap-2">
-              <Briefcase className="h-5 w-5 text-zinc-400" />
+            <CardTitle className="text-xl font-semibold flex items-center gap-2" style={{ color: linkedinColors.textPrimary }}>
               Experience
             </CardTitle>
             <div className="flex gap-2">
@@ -628,7 +660,7 @@ export function LinkedInProfile({
                 size="sm"
                 variant="ghost"
                 onClick={addExperience}
-                className="text-blue-400"
+                className="text-[#0077B5] hover:bg-[#E7F3FF]"
               >
                 <Plus className="h-4 w-4 mr-1" />
                 Add
@@ -642,7 +674,7 @@ export function LinkedInProfile({
                   ).join("\n\n");
                   copyToClipboard(text, "Experience");
                 }}
-                className="text-zinc-400"
+                className="text-[#666666] hover:bg-[#F4F2EE]"
               >
                 <Copy className="h-4 w-4" />
               </Button>
@@ -652,9 +684,14 @@ export function LinkedInProfile({
         <CardContent className="space-y-6">
           {profile.experience.length === 0 ? (
             <div className="text-center py-8">
-              <Briefcase className="h-10 w-10 mx-auto mb-3 text-zinc-600" />
-              <p className="text-zinc-500 text-sm mb-3">No experience added yet</p>
-              <Button size="sm" onClick={addExperience} className="bg-blue-600 hover:bg-blue-500">
+              <Briefcase className="h-10 w-10 mx-auto mb-3 text-[#666666]" />
+              <p className="text-sm mb-3" style={{ color: linkedinColors.textSecondary }}>No experience added yet</p>
+              <Button
+                size="sm"
+                onClick={addExperience}
+                className="rounded-full"
+                style={{ backgroundColor: linkedinColors.primary }}
+              >
                 <Plus className="h-4 w-4 mr-1" />
                 Add Experience
               </Button>
@@ -662,9 +699,9 @@ export function LinkedInProfile({
           ) : (
             profile.experience.map((exp, index) => (
               <div key={exp.id} className="flex gap-4 group">
-                {/* Company Logo Placeholder */}
-                <div className="w-12 h-12 rounded bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                  <Building2 className="h-6 w-6 text-zinc-500" />
+                {/* Company Logo Placeholder - LinkedIn style square */}
+                <div className="w-12 h-12 rounded bg-[#F4F2EE] flex items-center justify-center flex-shrink-0 border border-[#E0E0E0]">
+                  <Building2 className="h-6 w-6 text-[#666666]" />
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -674,16 +711,17 @@ export function LinkedInProfile({
                         value={exp.title}
                         onChange={(title) => updateExperience(exp.id, { title })}
                         placeholder="Job Title"
-                        className="font-medium text-white"
+                        className="font-semibold"
+                        style={{ color: linkedinColors.textPrimary }}
                       />
                       <EditableField
                         value={exp.company}
                         onChange={(company) => updateExperience(exp.id, { company })}
                         placeholder="Company Name"
-                        className="text-zinc-400 text-sm"
+                        className="text-sm"
+                        style={{ color: linkedinColors.textSecondary }}
                       />
-                      <div className="flex items-center gap-2 text-zinc-500 text-sm mt-1">
-                        <Calendar className="h-3 w-3" />
+                      <div className="flex items-center gap-2 text-sm mt-1" style={{ color: linkedinColors.textSecondary }}>
                         <EditableField
                           value={`${exp.startDate}${exp.startDate && exp.endDate ? " - " : ""}${exp.endDate}`}
                           onChange={(duration) => {
@@ -691,7 +729,7 @@ export function LinkedInProfile({
                             updateExperience(exp.id, { startDate: start || "", endDate: end || "" });
                           }}
                           placeholder="Start - End Date"
-                          className="text-zinc-500"
+                          className="text-[#666666]"
                         />
                       </div>
                     </div>
@@ -699,7 +737,7 @@ export function LinkedInProfile({
                       size="sm"
                       variant="ghost"
                       onClick={() => removeExperience(exp.id)}
-                      className="text-red-400 opacity-0 group-hover:opacity-100"
+                      className="text-red-600 opacity-0 group-hover:opacity-100 hover:bg-red-50"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -709,8 +747,8 @@ export function LinkedInProfile({
                   {exp.bullets.length > 0 && (
                     <ul className="mt-3 space-y-1.5">
                       {exp.bullets.map((bullet, bulletIndex) => (
-                        <li key={bulletIndex} className="flex items-start gap-2 text-sm text-zinc-300">
-                          <span className="text-blue-400 mt-0.5">•</span>
+                        <li key={bulletIndex} className="flex items-start gap-2 text-sm" style={{ color: linkedinColors.textPrimary }}>
+                          <span className="text-[#666666] mt-0.5">•</span>
                           <EditableField
                             value={bullet}
                             onChange={(newBullet) => {
@@ -732,7 +770,7 @@ export function LinkedInProfile({
                     onClick={() => {
                       updateExperience(exp.id, { bullets: [...exp.bullets, ""] });
                     }}
-                    className="text-blue-400 text-xs mt-2"
+                    className="text-[#0077B5] text-xs mt-2 hover:bg-[#E7F3FF]"
                   >
                     <Plus className="h-3 w-3 mr-1" />
                     Add bullet
@@ -744,12 +782,11 @@ export function LinkedInProfile({
         </CardContent>
       </Card>
 
-      {/* Education Section */}
-      <Card className="bg-zinc-900 border-zinc-800">
+      {/* Education Section - LinkedIn style */}
+      <Card className="bg-white border-[#E0E0E0] shadow-sm rounded-lg">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-white text-lg flex items-center gap-2">
-              <GraduationCap className="h-5 w-5 text-zinc-400" />
+            <CardTitle className="text-xl font-semibold flex items-center gap-2" style={{ color: linkedinColors.textPrimary }}>
               Education
             </CardTitle>
             <Button
@@ -764,7 +801,7 @@ export function LinkedInProfile({
                   ],
                 }));
               }}
-              className="text-blue-400"
+              className="text-[#0077B5] hover:bg-[#E7F3FF]"
             >
               <Plus className="h-4 w-4 mr-1" />
               Add
@@ -773,12 +810,12 @@ export function LinkedInProfile({
         </CardHeader>
         <CardContent className="space-y-4">
           {profile.education.length === 0 ? (
-            <p className="text-zinc-500 text-sm text-center py-4">No education added</p>
+            <p className="text-sm text-center py-4" style={{ color: linkedinColors.textSecondary }}>No education added</p>
           ) : (
             profile.education.map((edu) => (
               <div key={edu.id} className="flex gap-4 group">
-                <div className="w-12 h-12 rounded bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                  <GraduationCap className="h-6 w-6 text-zinc-500" />
+                <div className="w-12 h-12 rounded bg-[#F4F2EE] flex items-center justify-center flex-shrink-0 border border-[#E0E0E0]">
+                  <GraduationCap className="h-6 w-6 text-[#666666]" />
                 </div>
                 <div className="flex-1">
                   <EditableField
@@ -792,7 +829,8 @@ export function LinkedInProfile({
                       }));
                     }}
                     placeholder="Institution Name"
-                    className="font-medium text-white"
+                    className="font-semibold"
+                    style={{ color: linkedinColors.textPrimary }}
                   />
                   <EditableField
                     value={edu.degree}
@@ -805,10 +843,11 @@ export function LinkedInProfile({
                       }));
                     }}
                     placeholder="Degree"
-                    className="text-zinc-400 text-sm"
+                    className="text-sm"
+                    style={{ color: linkedinColors.textSecondary }}
                   />
                   {edu.endYear && (
-                    <p className="text-zinc-500 text-sm">{edu.endYear}</p>
+                    <p className="text-sm" style={{ color: linkedinColors.textSecondary }}>{edu.endYear}</p>
                   )}
                 </div>
                 <Button
@@ -820,7 +859,7 @@ export function LinkedInProfile({
                       education: prev.education.filter(e => e.id !== edu.id),
                     }));
                   }}
-                  className="text-red-400 opacity-0 group-hover:opacity-100"
+                  className="text-red-600 opacity-0 group-hover:opacity-100 hover:bg-red-50"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -830,16 +869,15 @@ export function LinkedInProfile({
         </CardContent>
       </Card>
 
-      {/* Skills Section */}
-      <Card className="bg-zinc-900 border-zinc-800">
+      {/* Skills Section - LinkedIn style */}
+      <Card className="bg-white border-[#E0E0E0] shadow-sm rounded-lg">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-white text-lg flex items-center gap-2">
-              <Award className="h-5 w-5 text-zinc-400" />
+            <CardTitle className="text-xl font-semibold flex items-center gap-2" style={{ color: linkedinColors.textPrimary }}>
               Skills
-              <Badge variant="secondary" className="ml-2 bg-zinc-800 text-zinc-400">
+              <span className="ml-2 text-sm font-normal px-2 py-0.5 rounded-full bg-[#F4F2EE]" style={{ color: linkedinColors.textSecondary }}>
                 {profile.skills.length}
-              </Badge>
+              </span>
             </CardTitle>
             <div className="flex gap-2">
               <Button
@@ -849,7 +887,7 @@ export function LinkedInProfile({
                   const skill = prompt("Enter skill name:");
                   if (skill) addSkill(skill);
                 }}
-                className="text-blue-400"
+                className="text-[#0077B5] hover:bg-[#E7F3FF]"
               >
                 <Plus className="h-4 w-4 mr-1" />
                 Add Skill
@@ -858,7 +896,7 @@ export function LinkedInProfile({
                 size="sm"
                 variant="ghost"
                 onClick={() => copyToClipboard(profile.skills.map(s => s.name).join(", "), "Skills")}
-                className="text-zinc-400"
+                className="text-[#666666] hover:bg-[#F4F2EE]"
               >
                 <Copy className="h-4 w-4" />
               </Button>
@@ -867,26 +905,26 @@ export function LinkedInProfile({
         </CardHeader>
         <CardContent>
           {profile.skills.length === 0 ? (
-            <p className="text-zinc-500 text-sm text-center py-4">No skills added</p>
+            <p className="text-sm text-center py-4" style={{ color: linkedinColors.textSecondary }}>No skills added</p>
           ) : (
             <div className="space-y-3">
               {/* Top Skills */}
               <div className="space-y-2">
                 {profile.skills.slice(0, 5).map((skill, index) => (
-                  <div key={skill.name} className="flex items-center justify-between group p-2 rounded hover:bg-zinc-800/50">
+                  <div key={skill.name} className="flex items-center justify-between group p-2 rounded hover:bg-[#F4F2EE] border-b border-[#E0E0E0] last:border-b-0">
                     <div className="flex items-center gap-3">
-                      <span className="text-white">{skill.name}</span>
+                      <span className="font-medium" style={{ color: linkedinColors.textPrimary }}>{skill.name}</span>
                       {index < 3 && (
-                        <Badge className="bg-blue-500/20 text-blue-400 text-xs">Top Skill</Badge>
+                        <span className="text-xs px-2 py-0.5 rounded bg-[#E7F3FF] text-[#0077B5] font-medium">Top Skill</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-zinc-500 text-sm">{skill.endorsements} endorsements</span>
+                      <span className="text-sm" style={{ color: linkedinColors.textSecondary }}>{skill.endorsements} endorsements</span>
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => removeSkill(skill.name)}
-                        className="text-red-400 opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+                        className="text-red-600 opacity-0 group-hover:opacity-100 h-6 w-6 p-0 hover:bg-red-50"
                       >
                         <X className="h-3 w-3" />
                       </Button>
@@ -897,17 +935,18 @@ export function LinkedInProfile({
 
               {/* Other Skills */}
               {profile.skills.length > 5 && (
-                <div className="pt-3 border-t border-zinc-800">
+                <div className="pt-3 border-t border-[#E0E0E0]">
                   <div className="flex flex-wrap gap-2">
                     {profile.skills.slice(5).map((skill) => (
-                      <Badge
+                      <span
                         key={skill.name}
-                        className="bg-zinc-800 text-zinc-300 hover:bg-zinc-700 cursor-pointer group"
+                        className="px-3 py-1.5 rounded-full text-sm cursor-pointer group flex items-center gap-1 border border-[#E0E0E0] hover:bg-[#F4F2EE]"
+                        style={{ color: linkedinColors.textPrimary }}
                         onClick={() => removeSkill(skill.name)}
                       >
                         {skill.name}
-                        <X className="h-3 w-3 ml-1 opacity-0 group-hover:opacity-100" />
-                      </Badge>
+                        <X className="h-3 w-3 opacity-0 group-hover:opacity-100 text-red-600" />
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -917,24 +956,23 @@ export function LinkedInProfile({
         </CardContent>
       </Card>
 
-      {/* Certifications Section */}
+      {/* Certifications Section - LinkedIn style */}
       {profile.certifications.length > 0 && (
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-white border-[#E0E0E0] shadow-sm rounded-lg">
           <CardHeader className="pb-2">
-            <CardTitle className="text-white text-lg flex items-center gap-2">
-              <Award className="h-5 w-5 text-zinc-400" />
+            <CardTitle className="text-xl font-semibold flex items-center gap-2" style={{ color: linkedinColors.textPrimary }}>
               Licenses & Certifications
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {profile.certifications.map((cert) => (
               <div key={cert.id} className="flex gap-3 items-center">
-                <div className="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center">
-                  <Award className="h-5 w-5 text-zinc-500" />
+                <div className="w-12 h-12 rounded bg-[#F4F2EE] flex items-center justify-center border border-[#E0E0E0]">
+                  <Award className="h-6 w-6 text-[#666666]" />
                 </div>
                 <div>
-                  <p className="text-white font-medium">{cert.name}</p>
-                  {cert.issuer && <p className="text-zinc-400 text-sm">{cert.issuer}</p>}
+                  <p className="font-semibold" style={{ color: linkedinColors.textPrimary }}>{cert.name}</p>
+                  {cert.issuer && <p className="text-sm" style={{ color: linkedinColors.textSecondary }}>{cert.issuer}</p>}
                 </div>
               </div>
             ))}
@@ -942,8 +980,8 @@ export function LinkedInProfile({
         </Card>
       )}
 
-      {/* Copy All Button */}
-      <div className="flex justify-center pt-4">
+      {/* Copy All Button - LinkedIn style */}
+      <div className="flex justify-center pt-4 pb-2">
         <Button
           onClick={() => {
             const fullProfile = `
@@ -969,7 +1007,8 @@ ${profile.skills.map(s => s.name).join(", ")}
             `.trim();
             copyToClipboard(fullProfile, "Full LinkedIn profile");
           }}
-          className="bg-blue-600 hover:bg-blue-500"
+          className="rounded-full font-semibold px-6 text-white"
+          style={{ backgroundColor: linkedinColors.primary }}
         >
           <Copy className="h-4 w-4 mr-2" />
           Copy Entire Profile
