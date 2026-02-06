@@ -24,7 +24,7 @@ import { createWorker } from "tesseract.js";
 // OCR worker instance (lazy init)
 let ocrWorker = null;
 
-console.log("[ResumeParser] Module loaded - VERSION 4.0 with E-Commerce skills and robust email extraction");
+console.log("[ResumeParser] Module loaded - VERSION 4.2 with heavily spaced PDF normalization");
 
 // Common resume section headers to exclude from name detection (all lowercase)
 const SECTION_HEADERS = [
@@ -42,7 +42,12 @@ const SECTION_HEADERS = [
   "category head", "category growth", "category marketing", "omnichannel strategy",
   "inventory supply", "chain optimization", "category expansion", "digital marketing",
   "fashion business", "demand growth", "monetization travel", "business finance",
-  "strategic acquisitions", "employment overview", "career history", "core competencies skills"
+  "strategic acquisitions", "employment overview", "career history", "core competencies skills",
+  // Additional common headers
+  "job responsibilities", "responsibilities", "key responsibilities", "duties",
+  "role description", "job description", "position overview", "role overview",
+  "key achievements", "key accomplishments", "major achievements", "highlights",
+  "professional highlights", "career highlights", "key deliverables", "deliverables"
 ];
 
 // Individual words that commonly appear in section headers
@@ -50,7 +55,8 @@ const SECTION_HEADER_WORDS = [
   "summary", "profile", "objective", "experience", "education", "skills",
   "certifications", "projects", "achievements", "awards", "contact", "references",
   "qualifications", "competencies", "history", "details", "information",
-  "leadership", "executive", "professional"
+  "leadership", "executive", "professional", "responsibilities", "duties",
+  "deliverables", "highlights", "overview", "description"
 ];
 
 // Words that indicate this is NOT a person's name
@@ -63,7 +69,8 @@ const NOT_NAME_INDICATORS = [
   "engineer", "developer", "architect", "lead", "senior", "junior",
   "india", "usa", "bangalore", "mumbai", "delhi", "hyderabad", "chennai", "pune",
   "giva", "tata", "infosys", "wipro", "cognizant", "accenture", "capgemini",
-  "professional", "experience", "skills", "education", "objective", "career"
+  "professional", "experience", "skills", "education", "objective", "career",
+  "job", "responsibilities", "duties", "role", "position", "overview", "description"
 ];
 
 // Related skills mapping - when a skill is found, suggest these related ones
@@ -1017,7 +1024,30 @@ function extractResumeData(text) {
     "ServiceNow", "Workday", "Oracle EBS",
   ];
 
-  const textLower = text.toLowerCase();
+  // Normalize text for heavily spaced PDFs (like "J a v a" -> "Java")
+  // Detect if text has excessive spacing by checking for patterns like single letters separated by spaces
+  let normalizedText = text;
+  const singleCharPattern = /\b[A-Za-z]\s+[A-Za-z]\s+[A-Za-z]\b/g;
+  const singleCharMatches = text.match(singleCharPattern) || [];
+  const spacingRatio = singleCharMatches.length / (text.length / 100);
+
+  if (spacingRatio > 2) {
+    // High spacing ratio - normalize aggressively
+    // Step 1: Remove all single spaces between single letters
+    // "J a v a" -> "Java", "M i c r o s o f t" -> "Microsoft"
+    normalizedText = text.replace(/([A-Za-z])\s+([A-Za-z])(?=\s+[A-Za-z]|\s*$|\s*[^A-Za-z])/g, '$1$2');
+    // Run multiple passes for deeply spaced text
+    for (let i = 0; i < 5; i++) {
+      const prev = normalizedText;
+      normalizedText = normalizedText.replace(/([A-Za-z])\s+([A-Za-z])(?=\s+[A-Za-z]|\s*$|\s*[^A-Za-z])/g, '$1$2');
+      if (prev === normalizedText) break;
+    }
+    // Step 2: Clean up remaining single-space separations
+    normalizedText = normalizedText.replace(/([A-Za-z])\s([A-Za-z])/g, '$1$2');
+    console.log(`[ResumeParser] Normalized heavily spaced text (ratio: ${spacingRatio.toFixed(1)})`);
+  }
+
+  const textLower = normalizedText.toLowerCase();
   // Skills that need word boundary matching to avoid false positives
   const needsWordBoundary = ["Java", "SQL", "AWS", "GCP", "Git", "CSS", "PHP", "Scala", "Rust", "Ruby", "REST", "MQ"];
 
