@@ -57,23 +57,47 @@ const Index = () => {
       <header className="relative bg-zinc-900/50 backdrop-blur-xl border-b border-zinc-800 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-4">
+            {/* Left spacer for balance */}
+            <div className="flex-1" />
+
+            {/* Center - Logo */}
+            <div className="flex items-center gap-3 absolute left-1/2 transform -translate-x-1/2">
               <h1 className="text-2xl font-bold bg-gradient-to-r from-violet-400 via-purple-400 to-pink-400 bg-clip-text text-transparent animate-gradient-x">
                 HireLoop
               </h1>
-              <span className="hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-to-r from-violet-500/10 to-purple-500/10 border border-violet-500/20 text-violet-300 text-sm">
+              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-to-r from-violet-500/10 to-purple-500/10 border border-violet-500/20 text-violet-300 text-sm">
                 <Zap className="h-3.5 w-3.5 animate-pulse" />
-                AI-Powered
+                AI-POWERED
               </span>
             </div>
-            <div className="flex items-center space-x-4">
+
+            {/* Right - Navigation */}
+            <div className="flex items-center space-x-6 flex-1 justify-end">
+              <nav className="hidden md:flex items-center space-x-6">
+                <button
+                  onClick={() => document.getElementById('about-section')?.scrollIntoView({ behavior: 'smooth' })}
+                  className="text-zinc-400 hover:text-white transition-colors text-sm font-medium"
+                >
+                  About Us
+                </button>
+                <button
+                  onClick={() => document.getElementById('services-section')?.scrollIntoView({ behavior: 'smooth' })}
+                  className="text-zinc-400 hover:text-white transition-colors text-sm font-medium"
+                >
+                  Services
+                </button>
+                <button
+                  onClick={() => document.getElementById('pricing-section')?.scrollIntoView({ behavior: 'smooth' })}
+                  className="text-zinc-400 hover:text-white transition-colors text-sm font-medium"
+                >
+                  Pricing
+                </button>
+              </nav>
               {user ? (
                 <>
-                  <span className="text-sm text-zinc-400">
-                    Welcome, <span className="text-violet-300 font-medium">{profile?.full_name || 'User'}</span>
-                  </span>
                   <Button
                     variant="outline"
+                    size="sm"
                     onClick={() => {
                       switch (profile?.user_type) {
                         case 'job_seeker':
@@ -93,7 +117,7 @@ const Index = () => {
                   >
                     Dashboard
                   </Button>
-                  <Button variant="outline" onClick={signOut} className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white">
+                  <Button variant="outline" size="sm" onClick={signOut} className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white">
                     Logout
                   </Button>
                 </>
@@ -101,6 +125,7 @@ const Index = () => {
                 <>
                   <Button
                     variant="ghost"
+                    size="sm"
                     onClick={() => navigate('/login')}
                     className="text-zinc-400 hover:text-white hover:bg-zinc-800"
                   >
@@ -108,6 +133,7 @@ const Index = () => {
                     Login
                   </Button>
                   <Button
+                    size="sm"
                     onClick={() => navigate('/register')}
                     className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white shadow-lg shadow-violet-500/30"
                   >
@@ -154,8 +180,9 @@ const Index = () => {
           </h1>
 
           <p className="text-xl text-zinc-400 mb-10 max-w-3xl mx-auto leading-relaxed animate-in fade-in-0 duration-1000 delay-300">
-            Tell us about yourself in <span className="text-violet-300 font-semibold">2-3 sentences</span>. Our AI will create your CV,
-            optimize your LinkedIn, and find jobs that <span className="text-emerald-400 font-semibold">match your skills</span>.
+            <span className="text-violet-300 font-semibold">Empowering careers</span>, one connection at a time.
+            We believe everyone deserves a career that <span className="text-emerald-400 font-semibold">inspires them</span> —
+            and the tools to make it happen.
           </p>
 
           {/* CTA Buttons */}
@@ -184,7 +211,7 @@ const Index = () => {
           <div className="flex items-center justify-center gap-8 mt-12 text-zinc-500 animate-in fade-in-0 duration-1000 delay-700">
             <div className="flex items-center gap-2">
               <Shield className="h-4 w-4 text-emerald-400" />
-              <span className="text-sm">No signup required</span>
+              <span className="text-sm">Secure & Private</span>
             </div>
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-violet-400" />
@@ -245,7 +272,7 @@ const Index = () => {
         </div>
 
         {/* User Type Cards - Enhanced */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
+        <div id="about-section" className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
           {[
             {
               icon: Briefcase,
@@ -326,7 +353,7 @@ const Index = () => {
         </div>
 
         {/* Our Services Section - Dark & Enhanced */}
-        <div className="rounded-3xl p-12 mb-20 relative overflow-hidden animate-in fade-in-0 duration-1000" style={{ background: 'linear-gradient(135deg, rgba(17, 17, 27, 0.8) 0%, rgba(31, 31, 45, 0.8) 100%)' }}>
+        <div id="services-section" className="rounded-3xl p-12 mb-20 relative overflow-hidden animate-in fade-in-0 duration-1000" style={{ background: 'linear-gradient(135deg, rgba(17, 17, 27, 0.8) 0%, rgba(31, 31, 45, 0.8) 100%)' }}>
           {/* Background decoration */}
           <div className="absolute inset-0 overflow-hidden">
             <div className="absolute top-0 right-0 w-96 h-96 bg-violet-600/10 rounded-full blur-3xl" />
@@ -377,6 +404,138 @@ const Index = () => {
           </div>
         </div>
 
+        {/* Pricing Section */}
+        <div id="pricing-section" className="mb-20 animate-in fade-in-0 slide-in-from-bottom-8 duration-1000">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-bold mb-4">
+              <span className="bg-gradient-to-r from-violet-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                Simple, Transparent Pricing
+              </span>
+            </h2>
+            <p className="text-xl text-zinc-400">Choose the plan that fits your needs</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            {/* Free Plan */}
+            <Card className="bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 transition-all duration-300 hover:scale-[1.02] group">
+              <CardHeader className="text-center pb-4">
+                <CardTitle className="text-xl text-white">Starter</CardTitle>
+                <div className="mt-4">
+                  <span className="text-4xl font-bold text-white">Free</span>
+                </div>
+                <CardDescription className="text-zinc-500 mt-2">Perfect for getting started</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <ul className="space-y-3 text-sm text-zinc-400">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-400" />
+                    Basic resume analysis
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-400" />
+                    5 job matches per day
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-400" />
+                    Basic LinkedIn tips
+                  </li>
+                </ul>
+                <Button
+                  className="w-full mt-6 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                  variant="outline"
+                  onClick={() => navigate('/register')}
+                >
+                  Get Started
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Pro Plan */}
+            <Card className="bg-gradient-to-b from-violet-600/20 to-purple-600/10 border-violet-500/30 hover:border-violet-500/50 transition-all duration-300 hover:scale-[1.05] relative overflow-hidden group">
+              <div className="absolute top-0 right-0 bg-gradient-to-r from-violet-500 to-purple-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
+                POPULAR
+              </div>
+              <CardHeader className="text-center pb-4">
+                <CardTitle className="text-xl text-white">Professional</CardTitle>
+                <div className="mt-4">
+                  <span className="text-4xl font-bold text-white">₹499</span>
+                  <span className="text-zinc-400 text-sm">/month</span>
+                </div>
+                <CardDescription className="text-zinc-400 mt-2">For serious job seekers</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <ul className="space-y-3 text-sm text-zinc-300">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-400" />
+                    Advanced AI resume optimization
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-400" />
+                    Unlimited job matches
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-400" />
+                    LinkedIn profile overhaul
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-400" />
+                    ATS score optimization
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-400" />
+                    Priority support
+                  </li>
+                </ul>
+                <Button
+                  className="w-full mt-6 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white shadow-lg shadow-violet-500/30"
+                  onClick={() => navigate('/register')}
+                >
+                  <Zap className="h-4 w-4 mr-2" />
+                  Upgrade Now
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Enterprise Plan */}
+            <Card className="bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 transition-all duration-300 hover:scale-[1.02] group">
+              <CardHeader className="text-center pb-4">
+                <CardTitle className="text-xl text-white">Enterprise</CardTitle>
+                <div className="mt-4">
+                  <span className="text-4xl font-bold text-white">Custom</span>
+                </div>
+                <CardDescription className="text-zinc-500 mt-2">For companies & HR teams</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <ul className="space-y-3 text-sm text-zinc-400">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-400" />
+                    Everything in Professional
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-400" />
+                    Bulk candidate screening
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-400" />
+                    Custom integrations
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-400" />
+                    Dedicated account manager
+                  </li>
+                </ul>
+                <Button
+                  className="w-full mt-6 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                  variant="outline"
+                  onClick={() => navigate('/register')}
+                >
+                  Contact Sales
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
         {/* CTA Section - Enhanced */}
         <div className="text-center animate-in fade-in-0 slide-in-from-bottom-8 duration-1000">
           <Card className="bg-gradient-to-r from-violet-600 via-purple-600 to-pink-600 border-0 overflow-hidden relative">
@@ -406,7 +565,7 @@ const Index = () => {
               </div>
               <h2 className="text-4xl font-bold mb-4 text-white">Ready to Get Started?</h2>
               <p className="text-lg text-violet-100 mb-8 max-w-2xl mx-auto">
-                No account required. Just tell us about yourself and get your CV, LinkedIn tips, and job matches in <span className="font-bold underline">minutes</span>.
+                Join thousands of professionals who transformed their careers. Get your optimized CV, LinkedIn profile, and job matches in <span className="font-bold underline">minutes</span>.
               </p>
               <Button
                 size="lg"
