@@ -319,7 +319,7 @@ function EditableField({
       )}
       onClick={() => setEditing(true)}
     >
-      <span className={cn("flex-1", !value && "text-[#666666] italic")}>
+      <span className={cn("flex-1 text-[#000000]", !value && "!text-[#666666] italic")}>
         {value || placeholder}
       </span>
       <Pencil className="h-4 w-4 text-[#666666] opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -622,7 +622,6 @@ export function LinkedInProfile({
               placeholder="Write about yourself - your experience, expertise, and what drives you"
               multiline
               className="text-sm whitespace-pre-line leading-relaxed"
-              style={{ color: linkedinColors.textPrimary }}
             />
             {!expandedAbout && profile.about.length > 300 && (
               <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white to-transparent" />
