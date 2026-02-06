@@ -330,25 +330,50 @@ function formatSalary(salary_min, salary_max, currency) {
 
 /**
  * Main job matching function with AI enhancement
+ * Now supports multiple desired roles - searches for ALL roles and combines results
  */
 export async function matchJobs(input) {
   const { profileAnalysis, filters } = input;
 
   const userSkills = profileAnalysis?.coreSkills || [];
   const suggestedRoles = profileAnalysis?.suggestedRoles || [];
-  const desiredRole = filters?.desiredRole || suggestedRoles[0] || "";
+
+  // Support both single role and array of roles
+  let desiredRoles = [];
+  if (filters?.desiredRoles && Array.isArray(filters.desiredRoles)) {
+    desiredRoles = filters.desiredRoles;
+  } else if (filters?.desiredRole) {
+    desiredRoles = [filters.desiredRole];
+  } else if (suggestedRoles.length > 0) {
+    desiredRoles = suggestedRoles.slice(0, 3); // Use top 3 suggested roles
+  } else {
+    desiredRoles = ["Software Developer"];
+  }
+
   const location = filters?.location || "Bangalore";
   const experienceYears = filters?.experienceYears || profileAnalysis?.yearsOfExperience || 2;
+
+  console.log(`[Job Matching] Searching for ${desiredRoles.length} roles:`, desiredRoles);
 
   // Check if job APIs are configured
   const apiStatus = getApiStatus();
   if (!apiStatus.anyConfigured) {
-    const jobBoardRecommendations = generateJobBoardRecommendations(profileAnalysis, filters);
+    // Generate job board recommendations for ALL roles
+    const allJobBoards = [];
+    for (const role of desiredRoles.slice(0, 5)) { // Limit to 5 roles
+      const recommendations = generateJobBoardRecommendations(profileAnalysis, { ...filters, desiredRole: role });
+      allJobBoards.push({
+        role,
+        boards: recommendations.boards,
+        searchQuery: recommendations.searchQuery,
+      });
+    }
 
     return {
       matches: [],
       overallInsights: {
-        strongestFitCategory: desiredRole,
+        strongestFitCategory: desiredRoles[0],
+        searchedRoles: desiredRoles,
         topSkillsInDemand: userSkills.slice(0, 4),
         suggestedUpskilling: profileAnalysis?.marketGaps?.slice(0, 3) || [],
         jobsFound: 0,
@@ -358,19 +383,55 @@ export async function matchJobs(input) {
       message: "Live job APIs not configured. Use the job boards below to search.",
       apiStatus,
       jobBoardRecommendations: {
-        ...jobBoardRecommendations,
-        note: "Search with AI-optimized queries based on your profile."
+        roles: desiredRoles,
+        roleSpecificBoards: allJobBoards,
+        note: "Search for each role using the links below."
       }
     };
   }
 
-  // Search for jobs via real APIs
-  const searchResult = await searchJobs({
-    role: desiredRole,
-    location,
-    experienceYears,
-    skills: userSkills.slice(0, 5),
-  });
+  // Search for jobs for EACH desired role and combine results
+  const allJobs = [];
+  const allSources = new Set();
+  const allErrors = [];
+
+  for (const role of desiredRoles.slice(0, 5)) { // Limit to 5 roles to avoid API abuse
+    console.log(`[Job Matching] Searching jobs for: ${role}`);
+
+    const searchResult = await searchJobs({
+      role,
+      location,
+      experienceYears,
+      skills: userSkills.slice(0, 5),
+    });
+
+    // Add jobs with role tag
+    for (const job of searchResult.jobs) {
+      job.matchedRole = role; // Tag which role this job matched
+      allJobs.push(job);
+    }
+
+    searchResult.sources.forEach(s => allSources.add(s));
+    allErrors.push(...searchResult.errors);
+  }
+
+  // Deduplicate jobs by ID (same job might appear for multiple roles)
+  const uniqueJobs = [];
+  const seenIds = new Set();
+  for (const job of allJobs) {
+    if (!seenIds.has(job.id)) {
+      seenIds.add(job.id);
+      uniqueJobs.push(job);
+    }
+  }
+
+  console.log(`[Job Matching] Found ${uniqueJobs.length} unique jobs across ${desiredRoles.length} roles`);
+
+  const searchResult = {
+    jobs: uniqueJobs,
+    sources: [...allSources],
+    errors: allErrors,
+  };
 
   if (searchResult.jobs.length === 0) {
     return {
@@ -417,8 +478,8 @@ export async function matchJobs(input) {
   // Sort by match score
   scoredJobs.sort((a, b) => b.matchScore - a.matchScore);
 
-  // Format matches for response
-  const matches = scoredJobs.slice(0, 10).map(item => ({
+  // Format matches for response (increase limit to 20 for multi-role search)
+  const matches = scoredJobs.slice(0, 20).map(item => ({
     jobId: item.job.id,
     job: {
       id: item.job.id,
@@ -436,6 +497,7 @@ export async function matchJobs(input) {
       postedDate: item.job.postedDate,
       applyUrl: item.job.applyUrl,
       category: item.job.category,
+      matchedRole: item.job.matchedRole, // Which desired role this job matched
     },
     matchScore: item.matchScore,
     fitReasons: item.fitReasons,
@@ -458,10 +520,19 @@ export async function matchJobs(input) {
     match.skillsGap.forEach(skill => topSkillsInDemand.add(skill));
   }
 
+  // Count jobs per role
+  const jobsPerRole = {};
+  for (const match of matches) {
+    const role = match.job.matchedRole || desiredRoles[0];
+    jobsPerRole[role] = (jobsPerRole[role] || 0) + 1;
+  }
+
   return {
     matches,
     overallInsights: {
-      strongestFitCategory: desiredRole,
+      strongestFitCategory: desiredRoles[0],
+      searchedRoles: desiredRoles,
+      jobsPerRole,
       topSkillsInDemand: [...topSkillsInDemand].slice(0, 4),
       suggestedUpskilling: profileAnalysis?.marketGaps?.slice(0, 3) || [...topSkillsInDemand].slice(0, 3),
       jobsFound: searchResult.jobs.length,

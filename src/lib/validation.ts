@@ -301,8 +301,9 @@ export function validateDesiredRoles(roles: string[]): ValidationResult {
     return { valid: false, error: 'Please select at least one desired role' };
   }
 
-  if (roles.length > 3) {
-    return { valid: false, error: 'Please select up to 3 roles for focused job matching' };
+  // Minimum 3, maximum 10 roles
+  if (roles.length > 10) {
+    return { valid: false, error: 'Please select up to 10 roles' };
   }
 
   return { valid: true };

@@ -32,7 +32,9 @@ import {
   LOCATIONS,
   EXPERIENCE_YEARS,
   EXPERIENCE_MONTHS,
+  MIN_ROLES,
   MAX_ROLES,
+  MAX_SKILLS_AUTO,
   MAX_SKILLS_WARNING,
 } from "@/lib/constants";
 import {
@@ -546,6 +548,8 @@ function AssistantContent() {
   // Resume upload state
   const [isUploadingResume, setIsUploadingResume] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [resumeAutoFilled, setResumeAutoFilled] = useState(false);
+  const [autoFilledFields, setAutoFilledFields] = useState<string[]>([]);
 
   // Results state
   const [profileAnalysis, setProfileAnalysis] = useState<ProfileAnalysis | null>(null);
@@ -749,6 +753,8 @@ function AssistantContent() {
     // Clear upload state
     setUploadedFileName(null);
     setIsUploadingResume(false);
+    setResumeAutoFilled(false);
+    setAutoFilledFields([]);
 
     toast.success("Form cleared! Start fresh.");
   }, []);
@@ -912,7 +918,7 @@ function AssistantContent() {
 
     try {
       const result = await assistantApi.matchJobs(profileAnalysis, cvData || undefined, {
-        desiredRole: selectedRoles[0] || "",
+        desiredRoles: selectedRoles, // Pass ALL selected roles
         location,
         experienceYears: parseInt(experienceYears) || 0,
       });
@@ -956,6 +962,8 @@ function AssistantContent() {
 
     setIsUploadingResume(true);
     setUploadedFileName(file.name);
+    setResumeAutoFilled(false);
+    setAutoFilledFields([]);
 
     try {
       const result = await assistantApi.uploadResume(file) as {
@@ -982,98 +990,133 @@ function AssistantContent() {
       if (result?.success && result?.data) {
         const { text, extractedData } = result.data;
         const suggestions = result.suggestions;
+        const filledFields: string[] = [];
 
+        // AUTO-FILL RESUME TEXT (PRIMARY)
         if (text && text.trim().length > 0) {
           setResumeText(text);
           setTouched(prev => ({ ...prev, resumeText: true }));
+          filledFields.push("Resume Content");
         }
 
-        if (extractedData?.name && !fullName.trim()) {
+        // AUTO-FILL FULL NAME
+        if (extractedData?.name) {
           setFullName(extractedData.name);
           setTouched(prev => ({ ...prev, fullName: true }));
+          filledFields.push("Full Name");
         }
 
-        if (extractedData?.email && !email.trim()) {
+        // AUTO-FILL EMAIL
+        if (extractedData?.email) {
           setEmail(extractedData.email);
           setTouched(prev => ({ ...prev, email: true }));
+          filledFields.push("Email");
         }
 
-        if (extractedData?.linkedin && !linkedinUrl.trim()) {
+        // AUTO-FILL LINKEDIN URL
+        if (extractedData?.linkedin) {
           setLinkedinUrl(extractedData.linkedin);
           setTouched(prev => ({ ...prev, linkedinUrl: true }));
+          filledFields.push("LinkedIn URL");
         }
 
-        // AI-SUGGESTED SKILLS - Use AI suggestions if available, fallback to extracted
+        // AUTO-SELECT SKILLS (TOP 10 from resume)
         const skillsToUse = (suggestions?.skills && suggestions.skills.length > 0)
           ? suggestions.skills
           : extractedData?.skills || [];
 
+        console.log('[Resume Upload] Skills from backend:', skillsToUse);
+
         if (skillsToUse.length > 0) {
-          // Match skills against our predefined skill list
-          const matchedSkills = skillsToUse.filter(skill =>
-            ALL_SKILLS.some(category =>
-              category.items.some(item =>
-                item.toLowerCase() === skill.toLowerCase() ||
-                item.toLowerCase().includes(skill.toLowerCase()) ||
-                skill.toLowerCase().includes(item.toLowerCase())
-              )
-            )
-          );
+          // Match skills against our predefined skill list (ALL_SKILLS is array of {value, label, category})
+          const normalizedSkills: string[] = [];
 
-          // Find exact matches from our skill list
-          const normalizedSkills = matchedSkills.map(skill => {
-            for (const category of ALL_SKILLS) {
-              const match = category.items.find(item =>
-                item.toLowerCase() === skill.toLowerCase() ||
-                item.toLowerCase().includes(skill.toLowerCase()) ||
-                skill.toLowerCase().includes(item.toLowerCase())
-              );
-              if (match) return match;
+          for (const skill of skillsToUse) {
+            const skillLower = skill.toLowerCase();
+            // Find exact or close match in our skill list
+            const match = ALL_SKILLS.find(s =>
+              s.value.toLowerCase() === skillLower ||
+              s.value.toLowerCase().includes(skillLower) ||
+              skillLower.includes(s.value.toLowerCase())
+            );
+            if (match && !normalizedSkills.includes(match.value)) {
+              normalizedSkills.push(match.value);
             }
-            return skill;
-          });
+          }
 
-          const uniqueSkills = [...new Set(normalizedSkills)].slice(0, 12);
+          console.log('[Resume Upload] Matched skills:', normalizedSkills);
+
+          // Auto-select TOP 10 skills (MAX_SKILLS_AUTO)
+          const uniqueSkills = normalizedSkills.slice(0, MAX_SKILLS_AUTO);
           if (uniqueSkills.length > 0) {
             setSelectedSkills(uniqueSkills);
             setTouched(prev => ({ ...prev, selectedSkills: true }));
+            filledFields.push(`${uniqueSkills.length} Skills`);
+            console.log('[Resume Upload] Auto-selected skills:', uniqueSkills);
           }
         }
 
-        // AI-SUGGESTED PROFILE SUMMARY - Auto-fill self-description
-        if (suggestions?.profileSummary && suggestions.profileSummary.length > 0 && !selfDescription.trim()) {
+        // AUTO-FILL SELF-DESCRIPTION from AI summary
+        if (suggestions?.profileSummary && suggestions.profileSummary.length > 0) {
           const summaryText = suggestions.profileSummary.join(' ');
           setSelfDescription(summaryText);
           setTouched(prev => ({ ...prev, selfDescription: true }));
+          filledFields.push("About You");
         }
 
-        // SUGGESTED ROLES
-        if (extractedData?.suggestedRoles && extractedData.suggestedRoles.length > 0 && selectedRoles.length === 0) {
-          const matchedRoles = extractedData.suggestedRoles.filter(role =>
-            ALL_ROLES.some(category =>
-              category.items.some(item =>
-                item.toLowerCase() === role.toLowerCase()
-              )
-            )
-          );
+        // AUTO-SELECT TOP 3 ROLES from resume
+        console.log('[Resume Upload] Suggested roles from backend:', extractedData?.suggestedRoles);
+
+        if (extractedData?.suggestedRoles && extractedData.suggestedRoles.length > 0) {
+          // ALL_ROLES is array of {value, label, category} - match against value
+          const matchedRoles: string[] = [];
+
+          for (const role of extractedData.suggestedRoles) {
+            const roleLower = role.toLowerCase();
+            const match = ALL_ROLES.find(r => r.value.toLowerCase() === roleLower);
+            if (match && !matchedRoles.includes(match.value)) {
+              matchedRoles.push(match.value);
+            }
+          }
+
+          console.log('[Resume Upload] Matched roles:', matchedRoles);
 
           if (matchedRoles.length > 0) {
-            setSelectedRoles(matchedRoles.slice(0, 3));
+            // Select roles: minimum 3, maximum 10 (or all if fewer than 3)
+            const rolesToSelect = matchedRoles.slice(0, Math.max(MIN_ROLES, Math.min(matchedRoles.length, MAX_ROLES)));
+            setSelectedRoles(rolesToSelect);
             setTouched(prev => ({ ...prev, selectedRoles: true }));
+            filledFields.push(`${rolesToSelect.length} Roles`);
+            console.log('[Resume Upload] Auto-selected roles:', rolesToSelect);
           }
         }
 
-        // Show success with AI indicator
-        if (suggestions?.aiGenerated) {
-          toast.success("Resume analyzed with AI! Skills & summary suggested.");
+        // AUTO-FILL EXPERIENCE YEARS (if detected)
+        if (suggestions?.experienceYears !== null && suggestions?.experienceYears !== undefined) {
+          const years = Math.min(Math.max(0, Math.round(suggestions.experienceYears)), 20);
+          setExperienceYears(years.toString());
+          setTouched(prev => ({ ...prev, experienceYears: true }));
+          filledFields.push("Experience");
+        }
+
+        // Mark as auto-filled if we filled anything
+        if (filledFields.length > 0) {
+          setResumeAutoFilled(true);
+          setAutoFilledFields(filledFields);
+        }
+
+        // Show success with details
+        if (filledFields.length > 0) {
+          const aiIndicator = suggestions?.aiGenerated ? " with AI" : "";
+          toast.success(`Resume analyzed${aiIndicator}! Auto-filled: ${filledFields.slice(0, 3).join(", ")}${filledFields.length > 3 ? ` +${filledFields.length - 3} more` : ""}`);
         } else {
-          toast.success("Resume processed successfully!");
+          toast("Resume received - please fill in the details manually", { icon: "📝" });
         }
       } else {
-        toast("Resume received - optimizing with available data...", { icon: "⏳" });
+        toast("Resume received - please fill in the details manually", { icon: "📝" });
       }
     } catch {
-      toast("Resume received - optimizing with available data...", { icon: "⏳" });
+      toast("Resume uploaded - please fill in the details manually", { icon: "📝" });
     } finally {
       setIsUploadingResume(false);
       event.target.value = "";
@@ -1161,28 +1204,140 @@ function AssistantContent() {
                   <div className="p-2 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600">
                     <User className="h-5 w-5 text-white" />
                   </div>
-                  Tell us about yourself
+                  Get Started in Seconds
                 </CardTitle>
                 <CardDescription className="text-zinc-400">
-                  Fill in your details to get personalized career guidance. Fields marked with <span className="text-red-400">*</span> are required.
+                  Upload your resume and we'll do the rest. AI extracts your details automatically.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-8 pt-6">
+                {/* STEP 1: RESUME UPLOAD - PRIMARY CTA AT TOP */}
+                <div className="space-y-4">
+                  <div className={cn(
+                    "relative p-6 rounded-2xl border-2 border-dashed transition-all duration-300",
+                    isUploadingResume
+                      ? "border-violet-500 bg-violet-500/10"
+                      : resumeAutoFilled
+                        ? "border-emerald-500 bg-emerald-500/5"
+                        : "border-zinc-700 bg-zinc-800/30 hover:border-violet-500/50 hover:bg-zinc-800/50"
+                  )}>
+                    {/* Upload Area */}
+                    <div className="text-center">
+                      {isUploadingResume ? (
+                        // Loading State
+                        <div className="py-4 animate-in fade-in-0 duration-300">
+                          <div className="relative mx-auto w-16 h-16 mb-4">
+                            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 animate-pulse" />
+                            <div className="absolute inset-2 rounded-full bg-zinc-900 flex items-center justify-center">
+                              <Loader2 className="h-6 w-6 text-violet-400 animate-spin" />
+                            </div>
+                          </div>
+                          <p className="text-lg font-medium text-violet-300">Analyzing your resume...</p>
+                          <p className="text-sm text-zinc-500 mt-1">Extracting skills, experience, and contact info</p>
+                        </div>
+                      ) : resumeAutoFilled ? (
+                        // Success State
+                        <div className="py-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
+                          <div className="mx-auto w-16 h-16 rounded-full bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mb-4">
+                            <CheckCircle className="h-8 w-8 text-white" />
+                          </div>
+                          <p className="text-lg font-medium text-emerald-400">Resume analyzed successfully!</p>
+                          <p className="text-sm text-zinc-400 mt-1">
+                            Your details have been auto-filled. You can edit anything below.
+                          </p>
+                          {autoFilledFields.length > 0 && (
+                            <div className="flex flex-wrap gap-2 justify-center mt-3">
+                              {autoFilledFields.map((field, i) => (
+                                <Badge key={i} variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                                  <Check className="h-3 w-3 mr-1" />
+                                  {field}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="mt-4 text-zinc-500 hover:text-zinc-300"
+                            onClick={() => document.getElementById('resume-upload-main')?.click()}
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            Upload a different resume
+                          </Button>
+                        </div>
+                      ) : (
+                        // Default Upload State
+                        <div className="py-6">
+                          <div className="mx-auto w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/30 flex items-center justify-center mb-4">
+                            <Upload className="h-10 w-10 text-violet-400" />
+                          </div>
+                          <p className="text-xl font-semibold text-white mb-2">Upload Your Resume</p>
+                          <p className="text-zinc-400 mb-4">
+                            Drop your resume here or click to browse
+                          </p>
+                          <Button
+                            type="button"
+                            size="lg"
+                            className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white shadow-lg shadow-violet-500/30"
+                            onClick={() => document.getElementById('resume-upload-main')?.click()}
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            Choose File (PDF, DOCX, TXT)
+                          </Button>
+                          <p className="text-xs text-zinc-500 mt-3">
+                            Max 5MB • Your resume will auto-fill all fields below
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Hidden File Input */}
+                      <input
+                        type="file"
+                        id="resume-upload-main"
+                        accept=".pdf,.docx,.doc,.txt"
+                        onChange={handleResumeUpload}
+                        className="hidden"
+                        disabled={isUploadingResume}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Divider with "or" */}
+                  {!resumeAutoFilled && !isUploadingResume && (
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-zinc-800" />
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-zinc-900 px-4 text-zinc-500">or fill manually</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Personal Information Section */}
                 <div className="space-y-4">
                   <SectionHeader
                     icon={User}
                     title="Personal Information"
-                    description="Basic details for your profile"
+                    description={resumeAutoFilled ? "Auto-filled from your resume • Edit if needed" : "Basic details for your profile"}
                     required
                   />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-11">
                     <div className="space-y-2">
-                      <Label htmlFor="name" className={labelClass}>Full Name *</Label>
+                      <Label htmlFor="name" className={labelClass}>
+                        Full Name *
+                        {autoFilledFields.includes("Full Name") && (
+                          <Badge variant="outline" className="ml-2 text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                            Auto-filled
+                          </Badge>
+                        )}
+                      </Label>
                       <Input
                         id="name"
                         autoComplete="off"
-                        placeholder="First Last (e.g., Rahul Sharma)"
+                        placeholder={resumeAutoFilled && !fullName ? "Add your full name" : "First Last (e.g., Rahul Sharma)"}
                         value={fullName}
                         onChange={(e) => {
                           setFullName(e.target.value);
@@ -1195,18 +1350,32 @@ function AssistantContent() {
                         className={cn(
                           inputClass,
                           "transition-all duration-200",
-                          errors.fullName && touched.fullName ? 'border-red-500 focus:ring-red-500/20' : ''
+                          errors.fullName && touched.fullName ? 'border-red-500 focus:ring-red-500/20' : '',
+                          autoFilledFields.includes("Full Name") && fullName ? 'border-emerald-500/30' : ''
                         )}
                       />
                       <FieldError error={touched.fullName ? errors.fullName : undefined} />
+                      {resumeAutoFilled && !fullName && (
+                        <p className="text-xs text-amber-400 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          Add missing detail
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="email" className={labelClass}>Email *</Label>
+                      <Label htmlFor="email" className={labelClass}>
+                        Email *
+                        {autoFilledFields.includes("Email") && (
+                          <Badge variant="outline" className="ml-2 text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                            Auto-filled
+                          </Badge>
+                        )}
+                      </Label>
                       <Input
                         id="email"
                         type="email"
                         autoComplete="off"
-                        placeholder="your.email@gmail.com"
+                        placeholder={resumeAutoFilled && !email ? "Add your email address" : "your.email@gmail.com"}
                         value={email}
                         onChange={(e) => {
                           setEmail(e.target.value);
@@ -1219,10 +1388,17 @@ function AssistantContent() {
                         className={cn(
                           inputClass,
                           "transition-all duration-200",
-                          errors.email && touched.email ? 'border-red-500 focus:ring-red-500/20' : ''
+                          errors.email && touched.email ? 'border-red-500 focus:ring-red-500/20' : '',
+                          autoFilledFields.includes("Email") && email ? 'border-emerald-500/30' : ''
                         )}
                       />
                       <FieldError error={touched.email ? errors.email : undefined} />
+                      {resumeAutoFilled && !email && (
+                        <p className="text-xs text-amber-400 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          Add missing detail
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1232,13 +1408,20 @@ function AssistantContent() {
                   <SectionHeader
                     icon={Briefcase}
                     title="Career Preferences"
-                    description="Your target roles and experience"
+                    description={resumeAutoFilled ? "Auto-selected from your resume • Edit if needed" : "Your target roles and experience"}
                     required
                   />
                   <div className="space-y-4 pl-11">
                     {/* Desired Roles */}
                     <div className="space-y-2">
-                      <Label className={labelClass}>Desired Roles * (Select 1-{MAX_ROLES})</Label>
+                      <Label className={labelClass}>
+                        Desired Roles * (Select {MIN_ROLES}-{MAX_ROLES})
+                        {autoFilledFields.some(f => f.includes("Roles")) && selectedRoles.length > 0 && (
+                          <Badge variant="outline" className="ml-2 text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                            Auto-selected
+                          </Badge>
+                        )}
+                      </Label>
                       <MultiSelect
                         options={ALL_ROLES}
                         selected={selectedRoles}
@@ -1254,10 +1437,17 @@ function AssistantContent() {
                         showCategories={true}
                         className={cn(
                           "[&_button]:bg-zinc-800/50 [&_button]:border-zinc-700 [&_button]:text-white [&_button]:hover:bg-zinc-700",
-                          errors.selectedRoles && touched.selectedRoles ? '[&_button]:border-red-500' : ''
+                          errors.selectedRoles && touched.selectedRoles ? '[&_button]:border-red-500' : '',
+                          autoFilledFields.some(f => f.includes("Roles")) && selectedRoles.length > 0 ? '[&_button]:border-emerald-500/30' : ''
                         )}
                       />
                       <FieldError error={touched.selectedRoles ? errors.selectedRoles : undefined} />
+                      {resumeAutoFilled && selectedRoles.length === 0 && (
+                        <p className="text-xs text-amber-400 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          Select at least {MIN_ROLES} roles
+                        </p>
+                      )}
                     </div>
 
                     {/* Location and Experience */}
@@ -1298,7 +1488,14 @@ function AssistantContent() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label className={labelClass}>Total Experience *</Label>
+                        <Label className={labelClass}>
+                          Total Experience *
+                          {autoFilledFields.includes("Experience") && experienceYears && (
+                            <Badge variant="outline" className="ml-2 text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                              Auto-detected
+                            </Badge>
+                          )}
+                        </Label>
                         <div className="grid grid-cols-2 gap-2">
                           <Select
                             value={experienceYears}
@@ -1312,7 +1509,8 @@ function AssistantContent() {
                               className={cn(
                                 inputClass,
                                 "transition-all duration-200",
-                                errors.experienceYears && touched.experienceYears ? 'border-red-500' : ''
+                                errors.experienceYears && touched.experienceYears ? 'border-red-500' : '',
+                                autoFilledFields.includes("Experience") && experienceYears ? 'border-emerald-500/30' : ''
                               )}
                             >
                               <SelectValue placeholder="Years" />
@@ -1339,6 +1537,12 @@ function AssistantContent() {
                           </Select>
                         </div>
                         <FieldError error={touched.experienceYears ? errors.experienceYears : undefined} />
+                        {resumeAutoFilled && !experienceYears && (
+                          <p className="text-xs text-amber-400 flex items-center gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            Select your experience level
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1349,109 +1553,77 @@ function AssistantContent() {
                   <SectionHeader
                     icon={Wrench}
                     title="Your Skillset"
-                    description="Select your key skills - helps with job matching and resume optimization"
+                    description={resumeAutoFilled ? "Auto-extracted from your resume • Add or remove skills" : "Select your key skills - helps with job matching and resume optimization"}
                     required
                   />
                   <div className="pl-11">
-                    <MultiSelect
-                      options={ALL_SKILLS}
-                      selected={selectedSkills}
-                      onChange={(skills) => {
-                        setSelectedSkills(skills);
-                        setTouched(prev => ({ ...prev, selectedSkills: true }));
-                        validateField('selectedSkills', skills);
-                      }}
-                      placeholder="Search and select your skills..."
-                      searchPlaceholder="Search skills (e.g., React, Python, Sales)..."
-                      showCategories={true}
-                      warnAfter={MAX_SKILLS_WARNING}
-                      warnMessage="Consider focusing on your top skills for better job matching"
-                      className={cn(
-                        "[&_button]:bg-zinc-800/50 [&_button]:border-zinc-700 [&_button]:text-white [&_button]:hover:bg-zinc-700",
-                        errors.selectedSkills && touched.selectedSkills ? '[&_button]:border-red-500' : ''
-                      )}
-                    />
+                    <div className="space-y-2">
+                      <Label className={labelClass}>
+                        Skills *
+                        {autoFilledFields.some(f => f.includes("Skills")) && selectedSkills.length > 0 && (
+                          <Badge variant="outline" className="ml-2 text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                            {selectedSkills.length} auto-selected
+                          </Badge>
+                        )}
+                      </Label>
+                      <MultiSelect
+                        options={ALL_SKILLS}
+                        selected={selectedSkills}
+                        onChange={(skills) => {
+                          setSelectedSkills(skills);
+                          setTouched(prev => ({ ...prev, selectedSkills: true }));
+                          validateField('selectedSkills', skills);
+                        }}
+                        placeholder="Search and select your skills..."
+                        searchPlaceholder="Search skills (e.g., React, Python, Sales)..."
+                        showCategories={true}
+                        warnAfter={MAX_SKILLS_WARNING}
+                        warnMessage="Consider focusing on your top skills for better job matching"
+                        className={cn(
+                          "[&_button]:bg-zinc-800/50 [&_button]:border-zinc-700 [&_button]:text-white [&_button]:hover:bg-zinc-700",
+                          errors.selectedSkills && touched.selectedSkills ? '[&_button]:border-red-500' : '',
+                          autoFilledFields.some(f => f.includes("Skills")) && selectedSkills.length > 0 ? '[&_button]:border-emerald-500/30' : ''
+                        )}
+                      />
+                    </div>
                     <FieldError error={touched.selectedSkills ? errors.selectedSkills : undefined} />
+                    {resumeAutoFilled && selectedSkills.length === 0 && (
+                      <p className="text-xs text-amber-400 flex items-center gap-1 mt-2">
+                        <AlertTriangle className="h-3 w-3" />
+                        Select at least one skill
+                      </p>
+                    )}
                     <p className="text-xs text-zinc-500 mt-2">
-                      AI will cross-check your resume skills with your selections to flag inconsistencies.
+                      {resumeAutoFilled
+                        ? "These skills were extracted from your resume. Feel free to add or remove any."
+                        : "AI will cross-check your resume skills with your selections to flag inconsistencies."}
                     </p>
                   </div>
                 </div>
 
-                {/* Resume Section */}
+                {/* Resume Content Section - Collapsed if auto-filled, expandable */}
                 <div className="space-y-4">
                   <SectionHeader
                     icon={FileText}
                     title="Resume Content"
-                    description="Upload your resume or paste content for AI analysis"
+                    description={resumeAutoFilled ? "Extracted from your uploaded resume" : "Paste your resume content for AI analysis"}
                     required
                   />
                   <div className="pl-11 space-y-4">
-                    {/* Upload Resume Button */}
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <div className="relative">
-                        <input
-                          type="file"
-                          id="resume-upload"
-                          accept=".pdf,.docx,.doc,.txt"
-                          onChange={handleResumeUpload}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                          disabled={isUploadingResume}
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={cn(
-                            "w-full sm:w-auto gap-2 border-zinc-700 text-zinc-300 hover:bg-zinc-800",
-                            uploadedFileName ? "border-emerald-500 text-emerald-400" : ""
-                          )}
-                          disabled={isUploadingResume}
-                        >
-                          {isUploadingResume ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Parsing resume...
-                            </>
-                          ) : uploadedFileName ? (
-                            <>
-                              <CheckCircle className="h-4 w-4 text-emerald-400" />
-                              {uploadedFileName}
-                            </>
-                          ) : (
-                            <>
-                              <Upload className="h-4 w-4" />
-                              Upload Resume (PDF, DOCX, TXT)
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                      {uploadedFileName && (
-                        <p className="text-sm text-emerald-400 flex items-center gap-1 self-center">
-                          <CheckCircle className="h-3 w-3" />
-                          Resume parsed - fields auto-filled
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Info about auto-fill */}
-                    <div className="p-3 bg-violet-500/10 border border-violet-500/20 rounded-xl">
-                      <p className="text-sm text-violet-300 flex items-start gap-2">
-                        <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                        <span>
-                          <strong>AI-Powered Extraction:</strong> Upload your resume to automatically extract your name, email, LinkedIn URL, skills, and suggested roles.
-                        </span>
-                      </p>
-                    </div>
-
                     {/* Resume Text Area */}
                     <div className="space-y-2">
-                      <Label htmlFor="resume" className="text-sm text-zinc-400">
-                        Resume Content {uploadedFileName ? "(auto-filled from upload)" : ""}
+                      <Label htmlFor="resume" className="text-sm text-zinc-400 flex items-center gap-2">
+                        Resume Text *
+                        {autoFilledFields.includes("Resume Content") && resumeText && (
+                          <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                            Auto-extracted
+                          </Badge>
+                        )}
                       </Label>
                       <Textarea
                         id="resume"
                         autoComplete="off"
-                        placeholder="Paste your complete resume content here, or upload a file above. Include your work experience, education, skills, projects, and achievements..."
+                        placeholder={resumeAutoFilled ? "Resume content extracted from your file" : "Paste your complete resume content here. Include your work experience, education, skills, projects, and achievements..."}
                         value={resumeText}
                         onChange={(e) => {
                           setResumeText(e.target.value);
@@ -1465,8 +1637,10 @@ function AssistantContent() {
                         }}
                         className={cn(
                           inputClass,
-                          "min-h-[180px] transition-all duration-200",
-                          errors.resumeText && touched.resumeText ? 'border-red-500 focus:ring-red-500/20' : ''
+                          "transition-all duration-200",
+                          resumeAutoFilled ? "min-h-[100px]" : "min-h-[180px]",
+                          errors.resumeText && touched.resumeText ? 'border-red-500 focus:ring-red-500/20' : '',
+                          autoFilledFields.includes("Resume Content") && resumeText ? 'border-emerald-500/30' : ''
                         )}
                       />
                       <FieldError error={touched.resumeText ? errors.resumeText : undefined} />
@@ -1474,7 +1648,9 @@ function AssistantContent() {
                     </div>
 
                     <p className="text-xs text-zinc-500">
-                      AI extracts skills and generates your CV from this content. The more detailed your resume, the better the analysis.
+                      {resumeAutoFilled
+                        ? "This content was extracted from your resume. You can edit it if needed."
+                        : "AI extracts skills and generates your CV from this content. The more detailed your resume, the better the analysis."}
                     </p>
                   </div>
                 </div>
@@ -1484,11 +1660,18 @@ function AssistantContent() {
                   <SectionHeader
                     icon={Linkedin}
                     title="Additional Information"
-                    description="Optional but recommended for better optimization"
+                    description={resumeAutoFilled ? "Auto-filled where possible • Edit or add more" : "Optional but recommended for better optimization"}
                   />
                   <div className="space-y-4 pl-11">
                     <div className="space-y-2">
-                      <Label htmlFor="self" className={labelClass}>About You (Optional)</Label>
+                      <Label htmlFor="self" className={labelClass}>
+                        About You (Optional)
+                        {autoFilledFields.includes("About You") && selfDescription && (
+                          <Badge variant="outline" className="ml-2 text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                            AI-generated
+                          </Badge>
+                        )}
+                      </Label>
                       <Textarea
                         id="self"
                         autoComplete="off"
@@ -1502,13 +1685,24 @@ function AssistantContent() {
                           handleBlur('selfDescription');
                           validateField('selfDescription', selfDescription);
                         }}
-                        className={cn(inputClass, "min-h-[100px] transition-all duration-200")}
+                        className={cn(
+                          inputClass,
+                          "min-h-[100px] transition-all duration-200",
+                          autoFilledFields.includes("About You") && selfDescription ? 'border-emerald-500/30' : ''
+                        )}
                       />
                       <FieldWarning warning={touched.selfDescription ? warnings.selfDescription : undefined} />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="linkedin" className={labelClass}>LinkedIn Profile URL (Optional)</Label>
+                      <Label htmlFor="linkedin" className={labelClass}>
+                        LinkedIn Profile URL (Optional)
+                        {autoFilledFields.includes("LinkedIn URL") && linkedinUrl && (
+                          <Badge variant="outline" className="ml-2 text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                            Auto-filled
+                          </Badge>
+                        )}
+                      </Label>
                       <Input
                         id="linkedin"
                         autoComplete="off"
@@ -1524,7 +1718,11 @@ function AssistantContent() {
                           handleBlur('linkedinUrl');
                           validateField('linkedinUrl', linkedinUrl);
                         }}
-                        className={cn(inputClass, "transition-all duration-200")}
+                        className={cn(
+                          inputClass,
+                          "transition-all duration-200",
+                          autoFilledFields.includes("LinkedIn URL") && linkedinUrl ? 'border-emerald-500/30' : ''
+                        )}
                       />
                       <FieldWarning warning={touched.linkedinUrl ? warnings.linkedinUrl : undefined} />
                     </div>
@@ -1546,7 +1744,7 @@ function AssistantContent() {
                   <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl animate-in fade-in-0 duration-200">
                     <p className="text-sm text-amber-400 font-medium flex items-center gap-2 mb-2">
                       <Info className="h-4 w-4" />
-                      Complete these to enable analysis:
+                      {resumeAutoFilled ? "Almost there! Complete these fields:" : "Complete these to enable analysis:"}
                     </p>
                     <ul className="text-sm text-amber-300/80 space-y-1 ml-6">
                       {missingRequirements.map((req, i) => (
@@ -1573,25 +1771,27 @@ function AssistantContent() {
                     size="lg"
                   >
                     <Brain className="h-4 w-4 mr-2" />
-                    {isFormReady ? "Analyze My Profile" : "Complete Required Fields"}
+                    {isFormReady ? "Analyze My Profile" : resumeAutoFilled ? "Complete Missing Fields" : "Upload Resume to Start"}
                     <ArrowRight className="h-4 w-4 ml-2" />
                   </Button>
                   {isFormReady && (
                     <p className="text-xs text-center text-emerald-400 flex items-center justify-center gap-1">
                       <CheckCircle className="h-3 w-3" />
-                      All required fields completed - Ready to analyze
+                      {resumeAutoFilled ? "Resume analyzed - Ready for AI analysis" : "All required fields completed - Ready to analyze"}
                     </p>
                   )}
                   {/* Start Fresh Button */}
-                  <Button
-                    onClick={handleStartFresh}
-                    variant="ghost"
-                    className="w-full text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
-                    size="sm"
-                  >
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Clear Form & Start Fresh
-                  </Button>
+                  {(resumeAutoFilled || uploadedFileName) && (
+                    <Button
+                      onClick={handleStartFresh}
+                      variant="ghost"
+                      className="w-full text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+                      size="sm"
+                    >
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Clear Form & Start Fresh
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -2029,7 +2229,7 @@ function AssistantContent() {
                       Jobs Matched For You
                     </CardTitle>
                     <CardDescription className="text-zinc-400">
-                      Based on {selectedRoles[0] || "your profile"} in {location} with {experienceYears}+ years experience
+                      Searching {selectedRoles.length} role{selectedRoles.length > 1 ? 's' : ''}: {selectedRoles.slice(0, 3).join(", ")}{selectedRoles.length > 3 ? ` +${selectedRoles.length - 3} more` : ''} in {location}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4 pt-6">
@@ -2043,87 +2243,159 @@ function AssistantContent() {
                             <div>
                               <h3 className="font-semibold text-white">Top Recommended Job Boards</h3>
                               <p className="text-sm text-zinc-400">
-                                AI-optimized search queries based on your profile
+                                AI-optimized search for {jobMatches.jobBoardRecommendations?.roles?.length || selectedRoles.length} role{(jobMatches.jobBoardRecommendations?.roles?.length || selectedRoles.length) > 1 ? 's' : ''}
                               </p>
                             </div>
                           </div>
-                          {jobMatches.jobBoardRecommendations?.searchQuery && (
-                            <div className="mt-3 p-3 bg-zinc-800/50 rounded-lg">
-                              <p className="text-xs text-zinc-500 mb-1">Recommended search query:</p>
-                              <p className="text-sm font-medium text-white">
-                                "{jobMatches.jobBoardRecommendations.searchQuery}" in {jobMatches.jobBoardRecommendations.location}
-                              </p>
-                            </div>
-                          )}
+
+                          {/* Show searched roles */}
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {(jobMatches.jobBoardRecommendations?.roles || selectedRoles).map((role: string, idx: number) => (
+                              <Badge key={idx} variant="outline" className="border-violet-500/30 text-violet-400 bg-violet-500/10">
+                                {role}
+                              </Badge>
+                            ))}
+                          </div>
                         </div>
 
-                        <div className="grid gap-3">
-                          {jobMatches.jobBoardRecommendations?.boards?.map((board: {
-                            id: string;
-                            name: string;
-                            description: string;
-                            url: string;
-                            whyRecommended: string;
-                          }) => (
-                            <div key={board.id} className="border border-zinc-700 rounded-xl p-4 hover:border-violet-500/50 transition-all bg-zinc-800/30">
-                              <div className="flex justify-between items-start">
-                                <div className="flex-1">
-                                  <h4 className="font-semibold text-white flex items-center gap-2">
-                                    {board.name}
-                                    {board.id === "linkedin" && <Linkedin className="h-4 w-4 text-blue-400" />}
-                                  </h4>
-                                  <p className="text-sm text-zinc-400 mt-1">{board.description}</p>
-                                  <p className="text-xs text-violet-400 mt-2 flex items-center gap-1">
-                                    <Info className="h-3 w-3" />
-                                    {board.whyRecommended}
-                                  </p>
+                        {/* Role-specific job board links */}
+                        {jobMatches.jobBoardRecommendations?.roleSpecificBoards ? (
+                          <div className="space-y-6">
+                            {jobMatches.jobBoardRecommendations.roleSpecificBoards.map((roleBoards: {
+                              role: string;
+                              boards: { id: string; name: string; description: string; url: string; whyRecommended: string }[];
+                              searchQuery: string;
+                            }, roleIdx: number) => (
+                              <div key={roleIdx} className="space-y-3">
+                                <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+                                  <Target className="h-4 w-4 text-violet-400" />
+                                  {roleBoards.role}
+                                </h4>
+                                <div className="grid gap-2 pl-6">
+                                  {roleBoards.boards.slice(0, 3).map((board) => (
+                                    <div key={board.id} className="flex justify-between items-center border border-zinc-700 rounded-lg p-3 hover:border-violet-500/50 transition-all bg-zinc-800/30">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm text-white">{board.name}</span>
+                                        {board.id === "linkedin" && <Linkedin className="h-3 w-3 text-blue-400" />}
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="text-violet-400 hover:text-violet-300 hover:bg-violet-500/10"
+                                        asChild
+                                      >
+                                        <a href={board.url} target="_blank" rel="noopener noreferrer">
+                                          Search
+                                          <ExternalLink className="h-3 w-3 ml-1" />
+                                        </a>
+                                      </Button>
+                                    </div>
+                                  ))}
                                 </div>
-                                <Button
-                                  size="sm"
-                                  className="ml-4 bg-gradient-to-r from-violet-600 to-purple-600"
-                                  asChild
-                                >
-                                  <a href={board.url} target="_blank" rel="noopener noreferrer">
-                                    Apply
-                                    <ExternalLink className="h-3 w-3 ml-1" />
-                                  </a>
-                                </Button>
                               </div>
-                            </div>
-                          ))}
-                        </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="grid gap-3">
+                            {jobMatches.jobBoardRecommendations?.boards?.map((board: {
+                              id: string;
+                              name: string;
+                              description: string;
+                              url: string;
+                              whyRecommended: string;
+                            }) => (
+                              <div key={board.id} className="border border-zinc-700 rounded-xl p-4 hover:border-violet-500/50 transition-all bg-zinc-800/30">
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <h4 className="font-semibold text-white flex items-center gap-2">
+                                      {board.name}
+                                      {board.id === "linkedin" && <Linkedin className="h-4 w-4 text-blue-400" />}
+                                    </h4>
+                                    <p className="text-sm text-zinc-400 mt-1">{board.description}</p>
+                                    <p className="text-xs text-violet-400 mt-2 flex items-center gap-1">
+                                      <Info className="h-3 w-3" />
+                                      {board.whyRecommended}
+                                    </p>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    className="ml-4 bg-gradient-to-r from-violet-600 to-purple-600"
+                                    asChild
+                                  >
+                                    <a href={board.url} target="_blank" rel="noopener noreferrer">
+                                      Apply
+                                      <ExternalLink className="h-3 w-3 ml-1" />
+                                    </a>
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
 
                     {jobMatches.matches.length > 0 && (
                       <div className="space-y-4">
-                        {jobMatches.matches.map((job, i) => (
+                        {/* Show searched roles summary */}
+                        {jobMatches.overallInsights?.searchedRoles && (
+                          <div className="flex flex-wrap gap-2 mb-4">
+                            <span className="text-sm text-zinc-500">Jobs for:</span>
+                            {jobMatches.overallInsights.searchedRoles.map((role: string, idx: number) => (
+                              <Badge key={idx} variant="outline" className="border-violet-500/30 text-violet-400 bg-violet-500/10">
+                                {role}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+
+                        {jobMatches.matches.map((job: {
+                          title: string;
+                          company: string;
+                          location: string;
+                          fitScore?: number;
+                          matchScore?: number;
+                          whyFit?: string;
+                          fitReasons?: string[];
+                          applyLink?: string;
+                          job?: { applyUrl?: string; matchedRole?: string };
+                        }, i: number) => (
                           <div key={i} className="border border-zinc-700 rounded-xl p-4 hover:border-violet-500/50 transition-all bg-zinc-800/30">
                             <div className="flex justify-between items-start">
-                              <div>
-                                <h4 className="font-semibold text-white">{job.title}</h4>
-                                <p className="text-sm text-zinc-400 flex items-center gap-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h4 className="font-semibold text-white">{job.title || job.job?.title}</h4>
+                                  {/* Show which role this job matched */}
+                                  {job.job?.matchedRole && (
+                                    <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                                      {job.job.matchedRole}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-sm text-zinc-400 flex items-center gap-2 mt-1">
                                   <Building2 className="h-4 w-4" />
-                                  {job.company}
+                                  {job.company || job.job?.company}
                                 </p>
                                 <p className="text-sm text-zinc-500 flex items-center gap-2">
                                   <MapPin className="h-4 w-4" />
-                                  {job.location}
+                                  {job.location || job.job?.location}
                                 </p>
                               </div>
                               <Badge className={cn(
-                                "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-                                job.fitScore >= 80 ? "bg-emerald-500/20 text-emerald-400" :
-                                job.fitScore >= 60 ? "bg-amber-500/20 text-amber-400" :
-                                "bg-zinc-500/20 text-zinc-400"
+                                "ml-2",
+                                (job.fitScore || job.matchScore || 0) >= 80 ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" :
+                                (job.fitScore || job.matchScore || 0) >= 60 ? "bg-amber-500/20 text-amber-400 border-amber-500/30" :
+                                "bg-zinc-500/20 text-zinc-400 border-zinc-500/30"
                               )}>
-                                {job.fitScore}% fit
+                                {job.fitScore || job.matchScore || 70}% fit
                               </Badge>
                             </div>
-                            <p className="text-sm text-zinc-400 mt-3">{job.whyFit}</p>
+                            <p className="text-sm text-zinc-400 mt-3">
+                              {job.whyFit || job.fitReasons?.join(". ") || "Good match based on your skills and experience"}
+                            </p>
                             <div className="flex justify-end mt-3">
                               <Button size="sm" className="bg-gradient-to-r from-violet-600 to-purple-600" asChild>
-                                <a href={job.applyLink} target="_blank" rel="noopener noreferrer">
+                                <a href={job.applyLink || job.job?.applyUrl || "#"} target="_blank" rel="noopener noreferrer">
                                   Apply Now
                                   <ExternalLink className="h-3 w-3 ml-1" />
                                 </a>

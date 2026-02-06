@@ -642,56 +642,100 @@ function extractResumeData(text) {
   // Dedupe skills
   data.skills = [...new Set(data.skills)];
 
-  // Suggest roles based on skills
+  // Suggest roles based on skills - COMPREHENSIVE MAPPING
+  // Role names MUST match exactly with frontend constants.ts
   const roleMapping = {
-    // Software Development Roles
-    "Java Developer": ["Java", "Spring", "Spring Boot", "Hibernate", "Maven", "Microservices"],
-    "Java Backend Developer": ["Java", "Spring Boot", "REST", "Microservices", "SQL", "Maven"],
+    // ============ JAVA & BACKEND ============
+    "Java Developer": ["Java", "Spring", "Spring Boot", "Hibernate", "Maven", "JUnit"],
+    "Backend Developer": ["Java", "Spring Boot", "REST", "Microservices", "SQL", "Maven", "Node.js", "Python"],
+    "Senior Backend Developer": ["Java", "Spring Boot", "Microservices", "AWS", "CI/CD", "Architecture"],
     "Software Engineer": ["JavaScript", "Python", "Java", "C++", "Git", "Agile"],
     "Senior Software Engineer": ["Java", "Microservices", "Spring Boot", "AWS", "CI/CD", "Leadership"],
-    "Frontend Developer": ["React", "Angular", "Vue", "HTML", "CSS", "JavaScript"],
-    "Backend Developer": ["Node.js", "Django", "Flask", "SQL", "REST", "GraphQL"],
+    "Node.js Developer": ["Node.js", "Express", "JavaScript", "MongoDB", "REST", "GraphQL"],
+    "Python Developer": ["Python", "Django", "Flask", "FastAPI", "SQL", "Machine Learning"],
+    ".NET Developer": [".NET", "C#", "ASP.NET", "SQL Server", "Azure"],
+
+    // ============ GUIDEWIRE & INSURANCE ============
+    "Guidewire Developer": ["Guidewire", "PolicyCenter", "ClaimCenter", "BillingCenter", "Java", "Insurance", "Gosu"],
+    "Guidewire Consultant": ["Guidewire", "PolicyCenter", "Insurance", "Configuration", "Java"],
+    "Guidewire PolicyCenter Developer": ["Guidewire", "PolicyCenter", "Java", "Insurance", "Gosu"],
+    "Senior Guidewire Developer": ["Guidewire", "PolicyCenter", "ClaimCenter", "Java", "Insurance", "Leadership"],
+    "Insurance Developer": ["Guidewire", "Insurance", "PolicyCenter", "Java", "Claims"],
+
+    // ============ FRONTEND ============
+    "Frontend Developer": ["React", "Angular", "Vue", "HTML", "CSS", "JavaScript", "TypeScript"],
+    "React Developer": ["React", "JavaScript", "TypeScript", "Redux", "CSS", "Node.js"],
+    "Angular Developer": ["Angular", "TypeScript", "JavaScript", "RxJS", "CSS"],
+    "Vue.js Developer": ["Vue", "JavaScript", "Vuex", "CSS", "Node.js"],
+    "UI Developer": ["HTML", "CSS", "JavaScript", "React", "Figma", "Responsive Design"],
+
+    // ============ FULL STACK ============
     "Full Stack Developer": ["React", "Node.js", "MongoDB", "Express", "JavaScript", "SQL"],
-    "Python Developer": ["Python", "Django", "Flask", "FastAPI", "SQL"],
-    // Cloud & DevOps
+    "MERN Stack Developer": ["MongoDB", "Express", "React", "Node.js", "JavaScript"],
+
+    // ============ CLOUD & DEVOPS ============
     "DevOps Engineer": ["Docker", "Kubernetes", "AWS", "CI/CD", "Terraform", "Jenkins"],
     "Cloud Engineer": ["AWS", "Azure", "GCP", "Docker", "Kubernetes", "Terraform"],
-    "Site Reliability Engineer": ["Linux", "Kubernetes", "Monitoring", "Grafana", "Prometheus"],
-    // Data Roles
-    "Data Scientist": ["Python", "Machine Learning", "Pandas", "TensorFlow", "Data Analysis"],
-    "Data Engineer": ["SQL", "Python", "Kafka", "Spark", "ETL", "Data Pipeline"],
-    "Data Analyst": ["SQL", "Excel", "Tableau", "Power BI", "Data Analysis"],
-    // Architecture & Lead
-    "Solution Architect": ["AWS", "Microservices", "Docker", "Architecture", "Cloud"],
-    "Technical Lead": ["Java", "Leadership", "Agile", "Code Review", "Mentoring"],
-    // Product & Project
-    "Product Manager": ["Agile", "Scrum", "Jira", "Communication", "Leadership"],
-    "Project Manager": ["Project Management", "Agile", "Scrum", "Jira", "Leadership"],
-    "Scrum Master": ["Scrum", "Agile", "Jira", "SAFe", "Kanban"],
-    // Design
-    "UX Designer": ["Figma", "Photoshop", "User Research", "Wireframing"],
-    "UI Developer": ["HTML", "CSS", "JavaScript", "React", "Figma"],
-    // Business Roles
-    "Business Analyst": ["SQL", "Excel", "Jira", "Requirements", "Agile"],
-    "Business Development Manager": ["Business Development", "Sales", "Negotiation", "Partnership Development"],
-    "Sales Manager": ["Sales", "Channel Sales", "Account Management", "CRM", "Negotiation"],
-    "Operations Manager": ["Operations", "Process Improvement", "Team Management", "Budget Management"],
-    "Marketing Manager": ["Marketing", "Market Research", "Analytics", "Product Launch"],
-    "HR Manager": ["Talent Acquisition", "Employee Engagement", "Performance Management", "Training"],
-    "Talent Acquisition Manager": ["Talent Acquisition", "Recruitment", "Sourcing", "Headhunting", "LinkedIn Recruiter"],
+    "AWS Solutions Architect": ["AWS", "Cloud", "Architecture", "EC2", "S3", "Lambda"],
+    "Site Reliability Engineer": ["Linux", "Kubernetes", "Monitoring", "Grafana", "Prometheus", "SRE"],
+
+    // ============ DATA ROLES ============
+    "Data Scientist": ["Python", "Machine Learning", "Pandas", "TensorFlow", "Data Analysis", "Statistics"],
+    "Data Engineer": ["SQL", "Python", "Kafka", "Spark", "ETL", "Data Pipeline", "Airflow"],
+    "Data Analyst": ["SQL", "Excel", "Tableau", "Power BI", "Data Analysis", "Python"],
+    "Machine Learning Engineer": ["Python", "TensorFlow", "PyTorch", "Machine Learning", "Deep Learning"],
+
+    // ============ ARCHITECTURE & LEAD ============
+    "Solution Architect": ["AWS", "Microservices", "Docker", "Architecture", "Cloud", "Design Patterns"],
+    "Technical Lead": ["Java", "Leadership", "Agile", "Code Review", "Mentoring", "Architecture"],
+    "Engineering Manager": ["Leadership", "Agile", "Team Management", "Java", "Architecture"],
+
+    // ============ PRODUCT & PROJECT ============
+    "Product Manager": ["Agile", "Scrum", "Jira", "Product Management", "Roadmap", "User Research"],
+    "Project Manager": ["Project Management", "Agile", "Scrum", "Jira", "Leadership", "PMP"],
+    "Scrum Master": ["Scrum", "Agile", "Jira", "SAFe", "Kanban", "Facilitation"],
+    "Technical Project Manager": ["Project Management", "Agile", "Technical", "Jira", "Software Development"],
+
+    // ============ DESIGN ============
+    "UX Designer": ["Figma", "UX", "User Research", "Wireframing", "Prototyping"],
+    "UI/UX Designer": ["Figma", "UI", "UX", "Adobe XD", "Sketch", "User Research"],
+    "Product Designer": ["Figma", "Product Design", "UX", "Prototyping", "Design Systems"],
+
+    // ============ QA & TESTING ============
+    "QA Engineer": ["Testing", "Selenium", "Test Automation", "QA", "JIRA", "Agile"],
+    "Test Automation Engineer": ["Selenium", "Test Automation", "Java", "Python", "CI/CD"],
+    "SDET": ["Test Automation", "Java", "Python", "Selenium", "API Testing", "CI/CD"],
+
+    // ============ MOBILE ============
+    "Mobile Developer": ["iOS", "Android", "React Native", "Flutter", "Mobile"],
+    "iOS Developer": ["iOS", "Swift", "Objective-C", "Xcode", "Mobile"],
+    "Android Developer": ["Android", "Kotlin", "Java", "Mobile", "Android Studio"],
+    "React Native Developer": ["React Native", "JavaScript", "Mobile", "React", "iOS", "Android"],
+
+    // ============ BUSINESS ROLES ============
+    "Business Analyst": ["SQL", "Excel", "Jira", "Requirements", "Agile", "Business Analysis"],
+    "Business Development Manager": ["Business Development", "Sales", "Negotiation", "Partnership"],
+    "Sales Manager": ["Sales", "Account Management", "CRM", "Negotiation", "Leadership"],
+    "Operations Manager": ["Operations", "Process Improvement", "Team Management", "Budget"],
+    "Marketing Manager": ["Marketing", "Digital Marketing", "Analytics", "SEO", "Content"],
+
+    // ============ HR & TALENT ============
+    "HR Manager": ["Talent Acquisition", "Employee Engagement", "Performance Management", "Training", "HR"],
+    "Talent Acquisition Manager": ["Talent Acquisition", "Recruitment", "Sourcing", "Leadership", "ATS"],
     "Recruiter": ["Recruitment", "Sourcing", "Talent Acquisition", "ATS", "Headhunting"],
-    // Legal & Compliance Roles
+    "Technical Recruiter": ["Technical Recruitment", "Sourcing", "IT Hiring", "ATS", "LinkedIn"],
+
+    // ============ LEGAL & COMPLIANCE ============
     "Legal Counsel": ["Legal", "Compliance", "Contract Management", "Corporate Governance", "Litigation"],
     "Head Legal": ["Legal", "Compliance", "Contract Negotiation", "M&A", "Due Diligence"],
     "Company Secretary": ["Company Secretary", "Secretarial", "Corporate Governance", "Board Advisory", "Compliance"],
-    "Compliance Officer": ["Compliance", "Regulatory Compliance", "Risk Management", "Corporate Governance"],
-    // Finance Roles
-    "Financial Analyst": ["Financial Analysis", "Excel", "Investment", "Risk Management"],
-    "Investment Analyst": ["Investment", "Portfolio Management", "Financial Analysis", "Mutual Funds"],
-    "Relationship Manager": ["Sales", "Account Management", "Customer Success", "Banking"],
-    // Insurance
-    "Insurance Developer": ["Guidewire", "PolicyCenter", "Java", "Insurance"],
-    "Guidewire Developer": ["Guidewire", "PolicyCenter", "ClaimCenter", "Insurance", "Java"],
+    "Compliance Officer": ["Compliance", "Regulatory", "Risk Management", "Corporate Governance"],
+
+    // ============ FINANCE ============
+    "Financial Analyst": ["Financial Analysis", "Excel", "Financial Modeling", "Investment", "Valuation"],
+    "Investment Analyst": ["Investment", "Portfolio Management", "Financial Analysis", "Equity Research"],
+    "Relationship Manager": ["Sales", "Account Management", "Customer Success", "Banking", "Client Relations"],
+    "Finance Manager": ["Financial Planning", "Budgeting", "Accounting", "Excel", "SAP"],
   };
 
   for (const [role, roleSkills] of Object.entries(roleMapping)) {
@@ -703,11 +747,13 @@ function extractResumeData(text) {
     }
   }
 
-  // Sort by match count and take top 3
+  // Sort by match count and take TOP 10 roles (minimum 3 if available)
   data.suggestedRoles = data.suggestedRoles
     .sort((a, b) => b.matchCount - a.matchCount)
-    .slice(0, 3)
+    .slice(0, 10)
     .map(r => r.role);
+
+  console.log("[ResumeParser] Suggested roles:", data.suggestedRoles);
 
   return data;
 }

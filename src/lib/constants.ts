@@ -2950,8 +2950,12 @@ export const EXPERIENCE_MONTHS = [
   { value: "11", label: "11 months" },
 ];
 
-// Max roles allowed
-export const MAX_ROLES = 3;
+// Roles: minimum 3, maximum 10
+export const MIN_ROLES = 3;
+export const MAX_ROLES = 10;
+
+// Max skills for auto-selection from resume
+export const MAX_SKILLS_AUTO = 10;
 
 // Max skills before warning
 export const MAX_SKILLS_WARNING = 20;
