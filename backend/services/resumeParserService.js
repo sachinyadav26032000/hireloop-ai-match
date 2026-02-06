@@ -24,7 +24,7 @@ import { createWorker } from "tesseract.js";
 // OCR worker instance (lazy init)
 let ocrWorker = null;
 
-console.log("[ResumeParser] Module loaded - VERSION 3.6 with Mayank/May bug fix");
+console.log("[ResumeParser] Module loaded - VERSION 4.0 with E-Commerce skills and robust email extraction");
 
 // Common resume section headers to exclude from name detection (all lowercase)
 const SECTION_HEADERS = [
@@ -37,7 +37,12 @@ const SECTION_HEADERS = [
   "profile", "career summary", "career objective", "about me", "about", "bio",
   "business leadership", "executive summary", "professional experience", "key skills",
   "core skills", "areas of expertise", "professional profile", "career profile",
-  "curriculum vitae", "resume", "biodata"
+  "curriculum vitae", "resume", "biodata",
+  // E-Commerce resume section headers
+  "category head", "category growth", "category marketing", "omnichannel strategy",
+  "inventory supply", "chain optimization", "category expansion", "digital marketing",
+  "fashion business", "demand growth", "monetization travel", "business finance",
+  "strategic acquisitions", "employment overview", "career history", "core competencies skills"
 ];
 
 // Individual words that commonly appear in section headers
@@ -87,6 +92,15 @@ const RELATED_SKILLS_MAP = {
   "Recruitment": ["Talent Acquisition", "Sourcing", "ATS", "Interviewing"],
   "Legal": ["Compliance", "Contract Management", "Corporate Law"],
   "Finance": ["Financial Analysis", "Excel", "Budgeting", "Forecasting"],
+  // E-Commerce & Growth
+  "E-Commerce": ["Category Management", "Digital Marketing", "Analytics", "Omnichannel", "D2C"],
+  "Ecommerce": ["Category Management", "Digital Marketing", "Analytics", "Omnichannel", "D2C"],
+  "Category Management": ["P&L Management", "Pricing Strategy", "Inventory Management", "Analytics"],
+  "D2C": ["E-Commerce", "Digital Marketing", "Brand Management", "Customer Acquisition"],
+  "Omnichannel": ["E-Commerce", "Retail", "Customer Experience", "Digital Transformation"],
+  "Growth Strategy": ["Analytics", "A/B Testing", "User Acquisition", "Performance Marketing"],
+  "Performance Marketing": ["ROAS", "CAC", "Google Ads", "Meta Ads", "Analytics"],
+  "Digital Marketing": ["SEO", "SEM", "Content Marketing", "Social Media", "Analytics"],
 };
 
 /**
@@ -252,23 +266,37 @@ function fixSpacedName(name) {
 }
 
 /**
- * Check if a string looks like a company/organization name
+ * Check if a string looks like a company/organization name or section header
  */
 function looksLikeCompanyName(text) {
   if (!text) return false;
-  console.log(`[ResumeParser] looksLikeCompanyName called with: "${text}"`);
 
   // First, normalize by removing extra spaces (handles "B U S I N E S S" -> "BUSINESS")
   const normalized = text.replace(/\s+/g, '').toLowerCase();
   const lower = text.toLowerCase();
 
-  // Check both normalized and original
-  return NOT_NAME_INDICATORS.some(indicator => {
+  // Check if it matches any section header (normalized)
+  for (const header of SECTION_HEADERS) {
+    const normalizedHeader = header.replace(/\s+/g, '');
+    if (normalized === normalizedHeader || normalized.includes(normalizedHeader)) {
+      console.log(`[ResumeParser] looksLikeCompanyName: "${text}" matches section header "${header}"`);
+      return true;
+    }
+  }
+
+  // Check both normalized and original against NOT_NAME_INDICATORS
+  const isCompany = NOT_NAME_INDICATORS.some(indicator => {
     const normalizedIndicator = indicator.replace(/\s+/g, '');
     return normalized.includes(normalizedIndicator) ||
            lower.includes(indicator) ||
            lower.split(/\s+/).includes(indicator);
   });
+
+  if (isCompany) {
+    console.log(`[ResumeParser] looksLikeCompanyName: "${text}" matched NOT_NAME_INDICATOR`);
+  }
+
+  return isCompany;
 }
 
 /**
@@ -540,10 +568,75 @@ function extractResumeData(text) {
     suggestedRoles: [],
   };
 
-  // Extract email
-  const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-  if (emailMatch) {
-    data.email = emailMatch[0].toLowerCase();
+  // Extract email - handle spaced emails like "a nkitdutt87@gmail.com" or "adityarajput 98 3 @ gmail.com"
+  // Strategy: First try line-by-line extraction to handle PDF spacing artifacts
+  const emailLines = text.split('\n');
+  for (const line of emailLines) {
+    if (line.includes('@')) {
+      const trimmedLine = line.trim();
+
+      // For shorter lines (likely dedicated email line), clean entire line
+      if (trimmedLine.length < 80) {
+        const cleaned = trimmedLine.replace(/\s+/g, '').toLowerCase();
+        const emailMatch = cleaned.match(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/);
+        if (emailMatch) {
+          data.email = emailMatch[0];
+          console.log(`[ResumeParser] Email extracted (cleaned line): "${trimmedLine}" -> "${emailMatch[0]}"`);
+          break;
+        }
+      }
+
+      // For any line with @, try to extract email portion
+      // Find @ position and extract surrounding characters, then clean
+      const atIndex = trimmedLine.indexOf('@');
+      if (atIndex > 0) {
+        // Look backwards up to 40 chars for email local part
+        let start = Math.max(0, atIndex - 40);
+        // Look forwards up to 25 chars for domain
+        let end = Math.min(trimmedLine.length, atIndex + 25);
+        const emailPortion = trimmedLine.substring(start, end);
+        const cleaned = emailPortion.replace(/\s+/g, '').toLowerCase();
+
+        // Try to extract with known TLDs first (most reliable)
+        // These patterns match email ending at known TLD
+        const knownTLDs = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'live.com',
+                          'icloud.com', 'protonmail.com', 'mail.com', 'aol.com',
+                          '.com', '.org', '.net', '.edu', '.gov', '.io', '.co.in', '.in', '.uk', '.us', '.info'];
+        for (const tld of knownTLDs) {
+          const tldIndex = cleaned.indexOf(tld);
+          if (tldIndex > 0) {
+            // Extract email ending at this TLD
+            const emailEndIndex = tldIndex + tld.length;
+            const emailCandidate = cleaned.substring(0, emailEndIndex);
+            // Validate it's a proper email format
+            const emailMatch = emailCandidate.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/);
+            if (emailMatch) {
+              data.email = emailMatch[0];
+              console.log(`[ResumeParser] Email extracted (TLD ${tld}): "${emailPortion.trim()}" -> "${emailMatch[0]}"`);
+              break;
+            }
+          }
+        }
+        if (data.email) break;
+
+        // Fallback: try general pattern (may include extra chars)
+        const generalMatch = cleaned.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}/);
+        if (generalMatch) {
+          data.email = generalMatch[0];
+          console.log(`[ResumeParser] Email extracted (general): "${emailPortion.trim()}" -> "${generalMatch[0]}"`);
+          break;
+        }
+      }
+    }
+  }
+
+  // Fallback: try standard regex on full text if line-by-line didn't find anything
+  if (!data.email) {
+    const standardEmailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    if (standardEmailMatch) {
+      data.email = standardEmailMatch[0].toLowerCase();
+      console.log(`[ResumeParser] Email extracted (standard fallback): "${standardEmailMatch[0]}"`);
+    }
   }
 
   // Extract phone (various formats)
@@ -655,8 +748,10 @@ function extractResumeData(text) {
       // e.g., "ANKIT DUTT +91 - 7022602702" -> extract "ANKIT DUTT"
       // More flexible phone pattern that handles various international formats
       if (/[\+\d]/.test(lineToCheck)) {
+        console.log(`[ResumeParser] Line ${i} has phone indicator, trying extraction from: "${lineToCheck}"`);
         const phonePatterns = [
-          /\+\s*\d{1,3}[\s\-]*\d{3,}[\s\-]*\d{3,}/, // + 91 - 7022602702 or +91-7022602702
+          /\+\s*\d{1,3}[\s\-]+\d{10}/,               // +91 - 7022602702 (with separator before 10 digits)
+          /\+\s*\d{1,3}[\s\-]*\d{3,}[\s\-]*\d{3,}/, // + 91 - 702 260 2702 or +91-7022602702
           /\+\s*\d{1,3}[\s\-]*\d{10,}/,              // +91 7022602702
           /\d{10,}/,                                  // 7022602702
           /\(\d{3}\)[\s\-]?\d{3}[\s\-]?\d{4}/,       // (123) 456-7890
@@ -666,18 +761,26 @@ function extractResumeData(text) {
           const phoneMatch = lineToCheck.match(phonePattern);
           if (phoneMatch) {
             const phoneIndex = lineToCheck.indexOf(phoneMatch[0]);
-            if (phoneIndex > 4) {
+            console.log(`[ResumeParser] Phone match: "${phoneMatch[0]}" at index ${phoneIndex}`);
+            if (phoneIndex > 3) {  // Reduced from 4 to 3 to catch shorter names
               // Extract and clean: remove all non-letter characters from start and end
               const rawName = lineToCheck.substring(0, phoneIndex);
               let namePortion = rawName.replace(/[^a-zA-Z]+$/, '').replace(/^[^a-zA-Z]+/, '');
               // Normalize internal whitespace
-              namePortion = namePortion.replace(/\s+/g, ' ');
+              namePortion = namePortion.replace(/\s+/g, ' ').trim();
+
+              console.log(`[ResumeParser] Raw name portion: "${rawName}" -> cleaned: "${namePortion}"`);
 
               const isValidName = namePortion && namePortion.length >= 4 && /^[a-zA-Z][a-zA-Z\s\-'.]*[a-zA-Z]$/.test(namePortion);
               if (isValidName) {
-                console.log(`[ResumeParser] Extracted name before phone: "${namePortion}"`);
-                lineToCheck = namePortion;
-                break;
+                // Additional check: make sure extracted name is not a section header
+                if (!looksLikeCompanyName(namePortion)) {
+                  console.log(`[ResumeParser] Extracted name before phone: "${namePortion}"`);
+                  lineToCheck = namePortion;
+                  break;
+                } else {
+                  console.log(`[ResumeParser] Extracted portion "${namePortion}" looks like company/section, skipping`);
+                }
               }
             }
           }
@@ -885,6 +988,16 @@ function extractResumeData(text) {
     "Product Launch", "Go-to-Market", "Partnership Development", "Vendor Management",
     "Cross-functional Collaboration", "Change Management", "Process Improvement",
     "KPI Management", "Performance Management", "Talent Acquisition", "Employee Engagement",
+    // E-Commerce & Digital Business
+    "E-Commerce", "Ecommerce", "D2C", "Direct to Consumer", "Omnichannel", "Category Management",
+    "Category Planning", "Digital Transformation", "Online Retail", "Marketplace",
+    "Amazon", "Flipkart", "Shopify", "Magento", "WooCommerce",
+    "GMV", "ARR", "ROAS", "CAC", "Customer Acquisition", "Retention",
+    "Inventory Management", "Supply Chain", "Demand Planning", "Pricing Strategy",
+    "Digital Marketing", "Performance Marketing", "SEO", "SEM", "PPC", "Google Ads", "Meta Ads",
+    "Affiliate Marketing", "Influencer Marketing", "Content Marketing",
+    "Growth Strategy", "Growth Marketing", "User Acquisition", "Conversion Optimization",
+    "A/B Testing", "Funnel Optimization", "Customer Journey", "UX Optimization",
     // Finance & Insurance
     "Financial Analysis", "Risk Management", "Investment", "Banking", "Insurance",
     "Wealth Management", "Portfolio Management", "Mutual Funds", "Asset Management",
@@ -1028,6 +1141,20 @@ function extractResumeData(text) {
     "Sales Manager": ["Sales", "Account Management", "CRM", "Negotiation", "Leadership"],
     "Operations Manager": ["Operations", "Process Improvement", "Team Management", "Budget"],
     "Marketing Manager": ["Marketing", "Digital Marketing", "Analytics", "SEO", "Content"],
+
+    // ============ E-COMMERCE & GROWTH ROLES ============
+    "E-Commerce Director": ["E-Commerce", "Ecommerce", "Category Management", "P&L Management", "Digital Transformation", "Omnichannel"],
+    "E-Commerce Manager": ["E-Commerce", "Ecommerce", "Category Management", "Digital Marketing", "Analytics"],
+    "Category Head": ["Category Management", "Category Planning", "P&L Management", "Revenue Growth", "Pricing Strategy"],
+    "Category Manager": ["Category Management", "Category Planning", "Inventory Management", "Pricing Strategy"],
+    "Growth Manager": ["Growth Strategy", "Growth Marketing", "User Acquisition", "Analytics", "Performance Marketing"],
+    "Growth Head": ["Growth Strategy", "User Acquisition", "P&L Management", "Leadership", "Performance Marketing"],
+    "Digital Marketing Manager": ["Digital Marketing", "Performance Marketing", "SEO", "SEM", "Google Ads", "Meta Ads"],
+    "Performance Marketing Manager": ["Performance Marketing", "ROAS", "CAC", "Google Ads", "Meta Ads", "Analytics"],
+    "D2C Brand Manager": ["D2C", "Direct to Consumer", "E-Commerce", "Brand Management", "Digital Marketing"],
+    "Omnichannel Manager": ["Omnichannel", "E-Commerce", "Retail", "Customer Experience", "Digital Transformation"],
+    "Business Head": ["P&L Management", "Revenue Growth", "Leadership", "Strategic Planning", "Team Building"],
+    "Marketplace Manager": ["Amazon", "Flipkart", "Marketplace", "E-Commerce", "Category Management"],
 
     // ============ HR & TALENT ============
     "HR Manager": ["Talent Acquisition", "Employee Engagement", "Performance Management", "Training", "HR"],
