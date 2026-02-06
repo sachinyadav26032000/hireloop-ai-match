@@ -22,3 +22,22 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment files
+backend/.env
+.env
+
+# Test files and data
+test-resumes/
+temp_resume.json
+backend/test_logs.txt
+backend/eng.traineddata
+
+# Debug scripts
+backend/debug-*.mjs
+backend/test-*.mjs
+backend/test-*.cjs
+
+# Windows null device artifacts
+nul
+backend/nul
