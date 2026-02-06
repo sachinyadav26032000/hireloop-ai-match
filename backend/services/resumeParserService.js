@@ -24,7 +24,7 @@ import { createWorker } from "tesseract.js";
 // OCR worker instance (lazy init)
 let ocrWorker = null;
 
-console.log("[ResumeParser] Module loaded - VERSION 2.0 with containsSectionWord fix");
+console.log("[ResumeParser] Module loaded - VERSION 3.6 with Mayank/May bug fix");
 
 // Common resume section headers to exclude from name detection (all lowercase)
 const SECTION_HEADERS = [
@@ -34,15 +34,60 @@ const SECTION_HEADERS = [
   "certifications", "projects", "achievements", "accomplishments", "awards",
   "contact", "contact information", "references", "languages", "interests",
   "personal information", "personal details", "hobbies", "volunteer", "publications",
-  "profile", "career summary", "career objective", "about me", "about", "bio"
+  "profile", "career summary", "career objective", "about me", "about", "bio",
+  "business leadership", "executive summary", "professional experience", "key skills",
+  "core skills", "areas of expertise", "professional profile", "career profile",
+  "curriculum vitae", "resume", "biodata"
 ];
 
 // Individual words that commonly appear in section headers
 const SECTION_HEADER_WORDS = [
   "summary", "profile", "objective", "experience", "education", "skills",
   "certifications", "projects", "achievements", "awards", "contact", "references",
-  "qualifications", "competencies", "history", "details", "information"
+  "qualifications", "competencies", "history", "details", "information",
+  "leadership", "executive", "professional"
 ];
+
+// Words that indicate this is NOT a person's name
+const NOT_NAME_INDICATORS = [
+  "resume", "cv", "curriculum", "vitae", "profile", "biodata", "summary",
+  "jewellery", "jewelry", "pvt", "ltd", "limited", "inc", "corp", "llc", "llp",
+  "technologies", "solutions", "services", "consulting", "enterprises", "group",
+  "business", "head", "leadership", "executive", "president", "vice",
+  "director", "manager", "officer", "specialist", "consultant", "analyst",
+  "engineer", "developer", "architect", "lead", "senior", "junior",
+  "india", "usa", "bangalore", "mumbai", "delhi", "hyderabad", "chennai", "pune",
+  "giva", "tata", "infosys", "wipro", "cognizant", "accenture", "capgemini",
+  "professional", "experience", "skills", "education", "objective", "career"
+];
+
+// Related skills mapping - when a skill is found, suggest these related ones
+const RELATED_SKILLS_MAP = {
+  "Java": ["Maven", "JUnit", "Spring", "Hibernate", "JPA"],
+  "Spring Boot": ["Spring", "REST", "Microservices", "Maven", "JUnit"],
+  "React": ["JavaScript", "Redux", "HTML", "CSS", "Node.js"],
+  "Angular": ["TypeScript", "RxJS", "HTML", "CSS"],
+  "Node.js": ["JavaScript", "Express", "MongoDB", "REST"],
+  "Python": ["Pandas", "NumPy", "Flask", "Django"],
+  "AWS": ["EC2", "S3", "Lambda", "CloudFormation", "Docker"],
+  "Docker": ["Kubernetes", "CI/CD", "DevOps", "Containerization"],
+  "Kubernetes": ["Docker", "Helm", "CI/CD", "DevOps"],
+  "SQL": ["MySQL", "PostgreSQL", "Database", "Data Modeling"],
+  "MongoDB": ["NoSQL", "Node.js", "Database"],
+  "Machine Learning": ["Python", "TensorFlow", "Data Science", "Statistics"],
+  "Microservices": ["REST", "Docker", "Kubernetes", "API Gateway"],
+  "Agile": ["Scrum", "Jira", "Sprint Planning", "Kanban"],
+  "Git": ["GitHub", "Version Control", "CI/CD"],
+  "Jenkins": ["CI/CD", "DevOps", "Automation"],
+  "Guidewire": ["PolicyCenter", "ClaimCenter", "Insurance", "Java"],
+  "PolicyCenter": ["Guidewire", "Insurance", "Java", "Gosu"],
+  "Sales": ["Negotiation", "CRM", "Business Development", "Account Management"],
+  "Marketing": ["Digital Marketing", "SEO", "Content", "Analytics"],
+  "Leadership": ["Team Management", "Mentoring", "Strategic Planning"],
+  "Recruitment": ["Talent Acquisition", "Sourcing", "ATS", "Interviewing"],
+  "Legal": ["Compliance", "Contract Management", "Corporate Law"],
+  "Finance": ["Financial Analysis", "Excel", "Budgeting", "Forecasting"],
+};
 
 /**
  * Detect mismatches between form data and resume data
@@ -100,6 +145,130 @@ export function detectDataMismatches(formData, resumeData) {
   }
 
   return mismatches;
+}
+
+/**
+ * Fix spaced-out names like "A R U N  A H L A W A T" -> "ARUN AHLAWAT"
+ * Also handles "A RUN A HLAWAT" or partial spacing
+ */
+function fixSpacedName(name) {
+  if (!name) return name;
+
+  // Skip if the name contains digits (likely has phone number or date)
+  if (/\d/.test(name)) {
+    return name;
+  }
+
+  // First, check if this is extreme letter-by-letter spacing
+  // e.g., "M R . A M O L G A T H A D I" or "A M O L  G A T H A D I"
+  // Pattern: mostly single letters separated by spaces
+  const words = name.trim().split(/\s+/);
+  const singleLetterWords = words.filter(w => w.length === 1 && /[a-zA-Z]/.test(w)).length;
+
+  // Extreme spacing: more than 50% of words are single letters
+  if (singleLetterWords >= 3 && singleLetterWords / words.length >= 0.5) {
+    console.log(`[ResumeParser] fixSpacedName extreme spacing detected: "${name}"`);
+
+    // Remove all spaces and punctuation, then try to split into name words
+    const letters = name.replace(/[^a-zA-Z]/g, '');
+
+    // For names with mixed case, try to find capital letter boundaries
+    const matches = letters.match(/[A-Z][a-z]*/g) || [];
+
+    if (matches.length >= 2) {
+      // Filter out common prefixes like MR, MS, DR
+      const prefixes = ['MR', 'MS', 'MRS', 'DR', 'PROF'];
+      const filtered = matches.filter(m => !prefixes.includes(m.toUpperCase()));
+
+      if (filtered.length >= 2) {
+        const result = filtered.join(' ');
+        console.log(`[ResumeParser] Fixed extreme spaced name: "${name}" -> "${result}"`);
+        return result;
+      }
+    }
+
+    // For ALL CAPS names like "A M O L G A T H A D I", try to find word boundaries
+    // by looking for common name patterns or vowel clusters
+    if (/^[A-Z\s.]+$/.test(name)) {
+      // Just concatenate all letters - user will need to correct if wrong
+      if (letters.length >= 4 && letters.length <= 30) {
+        console.log(`[ResumeParser] All caps spaced name - concatenating: "${letters}"`);
+        return letters;
+      }
+    }
+  }
+
+  // Handle moderate spacing like "A RUN A HLAWAT"
+  const nameWords = name.trim().split(/\s+/);
+  const singleCharCount = nameWords.filter(w => w.length === 1 && /[a-zA-Z]/.test(w)).length;
+  const totalWords = nameWords.length;
+
+  if (singleCharCount >= 2 && singleCharCount / totalWords >= 0.3) {
+    console.log(`[ResumeParser] fixSpacedName moderate spacing: "${name}" (${singleCharCount}/${totalWords} single chars)`);
+
+    const resultWords = [];
+    let currentWord = '';
+    let builtFromSingleLetter = false;
+
+    for (let i = 0; i < nameWords.length; i++) {
+      const word = nameWords[i];
+
+      if (word.length === 1 && /[a-zA-Z]/.test(word)) {
+        if (currentWord && !builtFromSingleLetter) {
+          resultWords.push(currentWord);
+          currentWord = word;
+          builtFromSingleLetter = true;
+        } else {
+          currentWord += word;
+          builtFromSingleLetter = true;
+        }
+      } else if (builtFromSingleLetter && currentWord.length > 0 && currentWord.length <= 3) {
+        currentWord += word;
+        builtFromSingleLetter = false;
+      } else {
+        if (currentWord) {
+          resultWords.push(currentWord);
+          currentWord = '';
+        }
+        if (/[a-zA-Z]+/.test(word)) {
+          resultWords.push(word);
+        }
+        builtFromSingleLetter = false;
+      }
+    }
+
+    if (currentWord) {
+      resultWords.push(currentWord);
+    }
+
+    const result = resultWords.join(' ');
+    if (result !== name) {
+      console.log(`[ResumeParser] Fixed spaced name: "${name}" -> "${result}"`);
+      return result;
+    }
+  }
+
+  return name;
+}
+
+/**
+ * Check if a string looks like a company/organization name
+ */
+function looksLikeCompanyName(text) {
+  if (!text) return false;
+  console.log(`[ResumeParser] looksLikeCompanyName called with: "${text}"`);
+
+  // First, normalize by removing extra spaces (handles "B U S I N E S S" -> "BUSINESS")
+  const normalized = text.replace(/\s+/g, '').toLowerCase();
+  const lower = text.toLowerCase();
+
+  // Check both normalized and original
+  return NOT_NAME_INDICATORS.some(indicator => {
+    const normalizedIndicator = indicator.replace(/\s+/g, '');
+    return normalized.includes(normalizedIndicator) ||
+           lower.includes(indicator) ||
+           lower.split(/\s+/).includes(indicator);
+  });
 }
 
 /**
@@ -420,57 +589,141 @@ function extractResumeData(text) {
         continue;
       }
 
-      // Skip if it's a section header (check full match and word-by-word)
-      const isSectionHeader = SECTION_HEADERS.some(header =>
+      // First, try to extract name portion before section headers
+      // e.g., "Aditya Rajput Career Objective" -> try extracting "Aditya Rajput"
+      let lineForNameExtraction = line;
+      const sectionPhrases = ["career objective", "objective", "profile summary", "professional summary",
+        "summary", "profile", "resume", "cv", "contact"];
+      for (const phrase of sectionPhrases) {
+        const phraseRegex = new RegExp(`\\s+${phrase.replace(/\s+/g, '\\s+')}.*$`, 'i');
+        if (phraseRegex.test(lineForNameExtraction)) {
+          const beforePhrase = lineForNameExtraction.replace(phraseRegex, '').trim();
+          if (beforePhrase.length >= 4 && /^[a-zA-Z\s\-'.]+$/.test(beforePhrase)) {
+            console.log(`[ResumeParser] Extracted name before section phrase: "${beforePhrase}" from "${line}"`);
+            lineForNameExtraction = beforePhrase;
+            break;
+          }
+        }
+      }
+
+      // Skip if entire line is a section header (but not if we extracted a name portion)
+      const lineLowerForCheck = lineForNameExtraction.toLowerCase();
+      const isSectionHeader = lineForNameExtraction === line && SECTION_HEADERS.some(header =>
         lineLower === header || lineLower.includes(header)
       );
 
-      // Also check if line contains common section header words
-      const lineWords = lineLower.split(/\s+/);
-      const containsSectionWord = SECTION_HEADER_WORDS.some(word =>
+      // Also check if line contains common section header words (but allow if we extracted name portion)
+      const lineWords = lineLowerForCheck.split(/\s+/);
+      const containsSectionWord = lineForNameExtraction === line && SECTION_HEADER_WORDS.some(word =>
         lineWords.includes(word)
       );
 
       // Direct check for common false positives (case-insensitive)
       const knownNotNames = ["profile summary", "professional summary", "career summary",
-        "executive summary", "summary of qualifications", "work experience", "contact info"];
-      const isKnownNotName = knownNotNames.some(notName => lineLower === notName || lineLower === notName.replace(/\s+/g, ""));
+        "executive summary", "summary of qualifications", "work experience", "contact info",
+        "business leadership", "business head", "technical lead", "team lead"];
+      const isKnownNotName = knownNotNames.some(notName => lineLowerForCheck === notName || lineLowerForCheck === notName.replace(/\s+/g, ""));
 
-      console.log(`[ResumeParser] Name check line ${i}: "${line}" -> isSectionHeader: ${isSectionHeader}, containsSectionWord: ${containsSectionWord}, isKnownNotName: ${isKnownNotName}`);
+      // Check if it looks like a company name (use extracted portion)
+      const isCompanyName = looksLikeCompanyName(lineForNameExtraction);
 
-      if (isSectionHeader || containsSectionWord || isKnownNotName) continue;
+      console.log(`[ResumeParser] Name check line ${i}: "${lineForNameExtraction}" -> isSectionHeader: ${isSectionHeader}, containsSectionWord: ${containsSectionWord}, isKnownNotName: ${isKnownNotName}, isCompanyName: ${isCompanyName}`);
 
-      // Skip if it contains email or phone
-      if (line.includes("@") || /\d{10}|\d{3}[-.\s]\d{3}/.test(line)) continue;
+      if (isSectionHeader || containsSectionWord || isKnownNotName || isCompanyName) continue;
+
+      // Handle lines with email - try to extract name before the email
+      // e.g., "Nikhil C M nikhilcm@gmail.com" -> extract "Nikhil C M"
+      let lineToCheck = lineForNameExtraction;
+      if (lineForNameExtraction.includes("@")) {
+        // Try to extract name before email
+        const emailMatch = lineForNameExtraction.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+        if (emailMatch) {
+          const emailIndex = lineForNameExtraction.indexOf(emailMatch[0]);
+          const namePortion = lineForNameExtraction.substring(0, emailIndex).trim();
+          if (namePortion && namePortion.length >= 4) {
+            lineToCheck = namePortion;
+            console.log(`[ResumeParser] Extracted name portion before email: "${namePortion}"`);
+          } else {
+            continue; // Skip if no valid name portion
+          }
+        } else {
+          continue;
+        }
+      }
+
+      // Handle lines with phone number - try to extract name before phone
+      // e.g., "ANKIT DUTT +91 - 7022602702" -> extract "ANKIT DUTT"
+      // More flexible phone pattern that handles various international formats
+      if (/[\+\d]/.test(lineToCheck)) {
+        const phonePatterns = [
+          /\+\s*\d{1,3}[\s\-]*\d{3,}[\s\-]*\d{3,}/, // + 91 - 7022602702 or +91-7022602702
+          /\+\s*\d{1,3}[\s\-]*\d{10,}/,              // +91 7022602702
+          /\d{10,}/,                                  // 7022602702
+          /\(\d{3}\)[\s\-]?\d{3}[\s\-]?\d{4}/,       // (123) 456-7890
+        ];
+
+        for (const phonePattern of phonePatterns) {
+          const phoneMatch = lineToCheck.match(phonePattern);
+          if (phoneMatch) {
+            const phoneIndex = lineToCheck.indexOf(phoneMatch[0]);
+            if (phoneIndex > 4) {
+              // Extract and clean: remove all non-letter characters from start and end
+              const rawName = lineToCheck.substring(0, phoneIndex);
+              let namePortion = rawName.replace(/[^a-zA-Z]+$/, '').replace(/^[^a-zA-Z]+/, '');
+              // Normalize internal whitespace
+              namePortion = namePortion.replace(/\s+/g, ' ');
+
+              const isValidName = namePortion && namePortion.length >= 4 && /^[a-zA-Z][a-zA-Z\s\-'.]*[a-zA-Z]$/.test(namePortion);
+              if (isValidName) {
+                console.log(`[ResumeParser] Extracted name before phone: "${namePortion}"`);
+                lineToCheck = namePortion;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // Skip if it's just a phone number line
+      if (/^\+?\d[\d\s\-().]{8,}$/.test(lineToCheck)) continue;
 
       // Skip if it's a job title pattern (contains common job words)
-      const jobTitleWords = ["engineer", "developer", "manager", "analyst", "executive", "director", "consultant", "specialist", "coordinator", "officer", "lead", "architect"];
-      const isJobTitle = jobTitleWords.some(word => lineLower.includes(word));
-      if (isJobTitle && !lineLower.match(/^[a-z]+\s+[a-z]+$/)) continue;
+      const lineToCheckLower = lineToCheck.toLowerCase();
+      const jobTitleWords = ["engineer", "developer", "manager", "analyst", "executive", "director", "consultant", "specialist", "coordinator", "officer", "lead", "architect", "head", "president", "vice"];
+      const isJobTitle = jobTitleWords.some(word => lineToCheckLower.includes(word));
+      if (isJobTitle && !lineToCheckLower.match(/^[a-z]+\s+[a-z]+$/)) continue;
 
       // Skip if it looks like a date or year (must START with year or month name)
-      if (/^(\d{4}\b|january|february|march|april|may|june|july|august|september|october|november|december|jan\b|feb\b|mar\b|apr\b|jun\b|jul\b|aug\b|sep\b|oct\b|nov\b|dec\b)/i.test(line)) continue;
+      // All month names need word boundaries to avoid matching names like "Mayank"
+      if (/^(\d{4}\b|january\b|february\b|march\b|april\b|may\b|june\b|july\b|august\b|september\b|october\b|november\b|december\b|jan\b|feb\b|mar\b|apr\b|jun\b|jul\b|aug\b|sep\b|oct\b|nov\b|dec\b)/i.test(lineToCheck)) continue;
 
       // Try to extract name - handling various formats:
       // "SHIVANI CHOPRA, LLB | CS | MBA" -> Extract "SHIVANI CHOPRA"
       // "John Smith - Software Engineer" -> Extract "John Smith"
-      // "Sudharshan Profile" -> Extract "Sudharshan" (if followed by last name)
+      // "Nikhil C M nikhilcm@gmail.com" -> Extract "Nikhil C M"
 
       // First, try to extract name before common separators
-      let namePart = line;
+      let namePart = lineToCheck;
 
-      // Handle case where "Profile" or "Resume" is appended to first name
-      // e.g., "Sudharshan Profile" or "John Resume"
-      if (/\s+(profile|resume|cv|bio)$/i.test(namePart)) {
-        namePart = namePart.replace(/\s+(profile|resume|cv|bio)$/i, '').trim();
-        // If just one word left and next line has another capitalized word, combine them
-        if (namePart.split(/\s+/).length === 1 && i + 1 < lines.length) {
-          const nextLine = lines[i + 1].trim();
-          const nextLineWords = nextLine.split(/\s+/);
-          if (nextLineWords.length === 1 && /^[A-Z][a-z]+$/.test(nextLineWords[0])) {
-            namePart = `${namePart} ${nextLineWords[0]}`;
-            console.log(`[ResumeParser] Combined name from two lines: "${namePart}"`);
-          }
+      // Handle case where section header words are appended to name
+      // e.g., "Aditya Rajput Career Objective" or "Sudharshan Profile"
+      const sectionSuffixes = ["career objective", "objective", "profile summary", "summary", "profile", "resume", "cv", "bio"];
+      for (const suffix of sectionSuffixes) {
+        const suffixRegex = new RegExp(`\\s+${suffix.replace(/\s+/g, '\\s+')}$`, 'i');
+        if (suffixRegex.test(namePart)) {
+          namePart = namePart.replace(suffixRegex, '').trim();
+          console.log(`[ResumeParser] Removed section suffix "${suffix}" -> "${namePart}"`);
+          break;
+        }
+      }
+
+      // If just one word left after removing suffix, try to combine with next line
+      if (namePart.split(/\s+/).length === 1 && i + 1 < lines.length) {
+        const nextLine = lines[i + 1].trim();
+        const nextLineWords = nextLine.split(/\s+/);
+        if (nextLineWords.length === 1 && /^[A-Z][a-z]+$/.test(nextLineWords[0])) {
+          namePart = `${namePart} ${nextLineWords[0]}`;
+          console.log(`[ResumeParser] Combined name from two lines: "${namePart}"`);
         }
       }
 
@@ -492,6 +745,14 @@ function extractResumeData(text) {
           }
         }
       }
+
+      // Fix spaced-out names (e.g., "A R U N" -> "ARUN")
+      namePart = fixSpacedName(namePart);
+
+      // Double-check it's not a company name after fixing
+      if (looksLikeCompanyName(namePart)) continue;
+
+      console.log(`[ResumeParser] Checking name candidate: "${namePart}"`);
 
       // Check if it looks like a name (2-5 words, alphabetic, reasonable length)
       const nameWords = namePart.split(/\s+/);
@@ -544,9 +805,30 @@ function extractResumeData(text) {
         // Check if it looks like a name (2-3 words, reasonable length)
         const words = candidate.split(/\s+/);
         if (words.length >= 2 && words.length <= 4 && candidate.length >= 4 && candidate.length <= 40) {
-          data.name = candidate;
-          console.log(`[ResumeParser] Fallback found ALL CAPS name: "${candidate}"`);
-          break;
+          // Fix spaced names
+          const fixedCandidate = fixSpacedName(candidate);
+          if (!looksLikeCompanyName(fixedCandidate)) {
+            data.name = fixedCandidate;
+            console.log(`[ResumeParser] Fallback found ALL CAPS name: "${fixedCandidate}"`);
+            break;
+          }
+        }
+      }
+    }
+
+    // Third fallback: Try to extract name from email
+    if (!data.name && data.email) {
+      const emailParts = data.email.split('@')[0];
+      // Remove common suffixes like numbers
+      const cleanEmail = emailParts.replace(/\d+$/, '').replace(/[._]/g, ' ');
+      const words = cleanEmail.split(' ').filter(w => w.length > 1);
+
+      if (words.length >= 2) {
+        // Capitalize each word
+        const nameFromEmail = words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+        if (!looksLikeCompanyName(nameFromEmail) && nameFromEmail.length >= 4 && nameFromEmail.length <= 40) {
+          data.name = nameFromEmail;
+          console.log(`[ResumeParser] Extracted name from email: "${nameFromEmail}"`);
         }
       }
     }
@@ -641,6 +923,34 @@ function extractResumeData(text) {
 
   // Dedupe skills
   data.skills = [...new Set(data.skills)];
+
+  // Add related skills based on detected skills
+  const originalSkillsCount = data.skills.length;
+  const relatedSkillsToAdd = [];
+
+  for (const skill of data.skills) {
+    const relatedSkills = RELATED_SKILLS_MAP[skill] || [];
+    for (const relatedSkill of relatedSkills) {
+      // Only add if not already present and text contains hints of this skill
+      const relatedLower = relatedSkill.toLowerCase();
+      const textLower = text.toLowerCase();
+      if (!data.skills.some(s => s.toLowerCase() === relatedLower) &&
+          !relatedSkillsToAdd.some(s => s.toLowerCase() === relatedLower)) {
+        // Check if there's any hint of this skill in the text
+        if (textLower.includes(relatedLower.split(' ')[0].toLowerCase())) {
+          relatedSkillsToAdd.push(relatedSkill);
+        }
+      }
+    }
+  }
+
+  // Add top related skills (limit to avoid over-suggestion)
+  data.skills = [...data.skills, ...relatedSkillsToAdd.slice(0, 5)];
+  data.skills = [...new Set(data.skills)];
+
+  if (relatedSkillsToAdd.length > 0) {
+    console.log(`[ResumeParser] Added ${Math.min(relatedSkillsToAdd.length, 5)} related skills: ${relatedSkillsToAdd.slice(0, 5).join(', ')}`);
+  }
 
   // Suggest roles based on skills - COMPREHENSIVE MAPPING
   // Role names MUST match exactly with frontend constants.ts
