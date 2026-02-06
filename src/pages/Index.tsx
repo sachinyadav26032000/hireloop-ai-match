@@ -224,49 +224,109 @@ const Index = () => {
           </div>
         </div>
 
-        {/* How It Works - Enhanced with animations */}
+        {/* How It Works - Bot-shaped clickable cards */}
         <div className="mb-20 animate-in fade-in-0 slide-in-from-bottom-8 duration-1000 delay-500">
           <h2 className="text-3xl font-bold text-center mb-4">
             <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">How It Works</span>
           </h2>
           <p className="text-zinc-500 text-center mb-12">Your journey to the perfect job in 4 simple steps</p>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="flex flex-wrap justify-center gap-6 md:gap-10">
             {[
-              { step: 1, title: "Tell Us About You", desc: "Write a few sentences about your background and goals", icon: User, color: "violet" },
-              { step: 2, title: "AI Analysis", desc: "We identify your skills, experience level, and ideal roles", icon: Brain, color: "purple" },
-              { step: 3, title: "Get Your CV", desc: "Download an ATS-optimized CV ready to use", icon: FileText, color: "emerald" },
-              { step: 4, title: "Apply to Jobs", desc: "See matched jobs with explanations for why they fit", icon: Target, color: "amber" },
+              { step: 1, title: "Tell Us About You", desc: "Write a few sentences about your background and goals", icon: User, gradient: "from-violet-500 to-purple-600" },
+              { step: 2, title: "AI Analysis", desc: "We identify your skills, experience level, and ideal roles", icon: Brain, gradient: "from-purple-500 to-pink-600" },
+              { step: 3, title: "Get Your CV", desc: "Download an ATS-optimized CV ready to use", icon: FileText, gradient: "from-emerald-500 to-teal-600" },
+              { step: 4, title: "Apply to Jobs", desc: "See matched jobs with explanations for why they fit", icon: Target, gradient: "from-amber-500 to-orange-600" },
             ].map((item, i) => (
-              <div
+              <button
                 key={item.step}
-                className="text-center group animate-in fade-in-0 slide-in-from-bottom-4 duration-500"
+                onClick={() => navigate('/assistant')}
+                className="flex flex-col items-center w-40 md:w-48 group cursor-pointer focus:outline-none animate-in fade-in-0 slide-in-from-bottom-4 duration-500"
                 style={{ animationDelay: `${i * 150}ms` }}
               >
-                <div className={cn(
-                  "relative w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:shadow-2xl",
-                  `bg-gradient-to-br from-${item.color}-500/20 to-${item.color}-600/10 border border-${item.color}-500/30 group-hover:shadow-${item.color}-500/20`
-                )}>
-                  <item.icon className={`h-7 w-7 text-${item.color}-400`} />
+                {/* Bot Container */}
+                <div className="relative mb-4 transition-all duration-300 group-hover:scale-105 group-hover:-translate-y-1">
+                  {/* Step Number - Top */}
                   <div className={cn(
-                    "absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold",
-                    `bg-${item.color}-500 text-white`
+                    "absolute -top-3 left-1/2 -translate-x-1/2 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-lg z-20",
+                    `bg-gradient-to-br ${item.gradient}`
                   )}>
                     {item.step}
                   </div>
+
+                  {/* Bot Body */}
+                  <div className="relative w-24 h-28 md:w-28 md:h-32">
+                    {/* Bot Head */}
+                    <div className={cn(
+                      "absolute top-0 left-1/2 -translate-x-1/2 w-20 h-20 md:w-24 md:h-24 rounded-2xl",
+                      "bg-gradient-to-br from-zinc-800 to-zinc-900",
+                      "border-2 border-zinc-700 group-hover:border-zinc-500",
+                      "shadow-lg group-hover:shadow-xl transition-all duration-300",
+                      "flex flex-col items-center justify-center overflow-hidden"
+                    )}>
+                      {/* Glow effect on hover */}
+                      <div className={`absolute inset-0 bg-gradient-to-br ${item.gradient} opacity-0 group-hover:opacity-15 transition-opacity duration-300`} />
+
+                      {/* Bot Eyes */}
+                      <div className="flex gap-3 mb-1.5 relative z-10">
+                        <div className="w-2.5 h-2.5 rounded-full bg-zinc-600 group-hover:bg-cyan-400 transition-colors duration-300 group-hover:shadow-[0_0_8px_rgba(34,211,238,0.6)]" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-zinc-600 group-hover:bg-cyan-400 transition-colors duration-300 group-hover:shadow-[0_0_8px_rgba(34,211,238,0.6)]" />
+                      </div>
+
+                      {/* Bot Screen with Icon */}
+                      <div className={cn(
+                        "w-12 h-9 md:w-14 md:h-10 rounded-lg flex items-center justify-center relative z-10",
+                        `bg-gradient-to-br ${item.gradient}`,
+                        "shadow-md"
+                      )}>
+                        <item.icon className="h-5 w-5 md:h-6 md:w-6 text-white group-hover:scale-110 transition-transform duration-300" />
+                        {/* Scan line */}
+                        <div className="absolute inset-0 overflow-hidden rounded-lg">
+                          <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/30 animate-scan-slow" />
+                        </div>
+                      </div>
+
+                      {/* Bot Mouth */}
+                      <div className="flex gap-0.5 mt-1.5 relative z-10">
+                        <div className="w-1 h-1.5 bg-zinc-600 rounded-full group-hover:bg-zinc-400 transition-colors" />
+                        <div className="w-1 h-2 bg-zinc-600 rounded-full group-hover:bg-zinc-400 transition-colors" />
+                        <div className="w-1 h-2.5 bg-zinc-600 rounded-full group-hover:bg-zinc-400 transition-colors" />
+                        <div className="w-1 h-2 bg-zinc-600 rounded-full group-hover:bg-zinc-400 transition-colors" />
+                        <div className="w-1 h-1.5 bg-zinc-600 rounded-full group-hover:bg-zinc-400 transition-colors" />
+                      </div>
+                    </div>
+
+                    {/* Bot Ears */}
+                    <div className="absolute top-8 md:top-10 -left-0.5 w-1.5 h-6 bg-zinc-700 rounded-l group-hover:bg-zinc-600 transition-colors" />
+                    <div className="absolute top-8 md:top-10 -right-0.5 w-1.5 h-6 bg-zinc-700 rounded-r group-hover:bg-zinc-600 transition-colors" />
+
+                    {/* Bot Neck */}
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-6 h-3 bg-zinc-700 rounded-b group-hover:bg-zinc-600 transition-colors" />
+                  </div>
                 </div>
-                <h3 className="font-semibold text-white mb-2 group-hover:text-violet-300 transition-colors">
+
+                {/* Title */}
+                <h3 className="font-semibold text-white text-center mb-1.5 group-hover:text-violet-300 transition-colors duration-300">
                   {item.title}
                 </h3>
-                <p className="text-sm text-zinc-500 group-hover:text-zinc-400 transition-colors">
+
+                {/* Description */}
+                <p className="text-xs md:text-sm text-zinc-500 text-center leading-snug group-hover:text-zinc-400 transition-colors">
                   {item.desc}
                 </p>
-                {i < 3 && (
-                  <div className="hidden md:block absolute top-1/2 right-0 translate-x-1/2 -translate-y-8">
-                    <ArrowRight className="h-5 w-5 text-zinc-700" />
-                  </div>
-                )}
-              </div>
+
+                {/* Click indicator on hover */}
+                <div className="mt-3 h-6 flex items-center justify-center">
+                  <span className={cn(
+                    "inline-flex items-center gap-1 text-xs px-3 py-1 rounded-full text-white shadow-md",
+                    `bg-gradient-to-r ${item.gradient}`,
+                    "opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0 transition-all duration-300"
+                  )}>
+                    <Sparkles className="h-3 w-3" />
+                    Start
+                  </span>
+                </div>
+              </button>
             ))}
           </div>
         </div>
@@ -611,6 +671,26 @@ const Index = () => {
           50% { background-position: 100% 50%; }
         }
 
+        @keyframes scan-vertical {
+          0% { transform: translateY(-100%); }
+          100% { transform: translateY(3200%); }
+        }
+
+        @keyframes scan-slow {
+          0% { transform: translateY(-100%); }
+          100% { transform: translateY(2800%); }
+        }
+
+        @keyframes float-particle {
+          0% { transform: translateY(0) scale(1); opacity: 1; }
+          100% { transform: translateY(-40px) scale(0); opacity: 0; }
+        }
+
+        @keyframes blink {
+          0%, 90%, 100% { opacity: 1; }
+          95% { opacity: 0.3; }
+        }
+
         .animate-float {
           animation: float 10s ease-in-out infinite;
         }
@@ -618,6 +698,22 @@ const Index = () => {
         .animate-gradient-x {
           background-size: 200% 200%;
           animation: gradient-x 3s ease infinite;
+        }
+
+        .animate-scan-vertical {
+          animation: scan-vertical 2s ease-in-out infinite;
+        }
+
+        .animate-scan-slow {
+          animation: scan-slow 3s ease-in-out infinite;
+        }
+
+        .animate-float-particle {
+          animation: float-particle 1s ease-out forwards;
+        }
+
+        .animate-blink {
+          animation: blink 3s ease-in-out infinite;
         }
       `}</style>
     </div>
