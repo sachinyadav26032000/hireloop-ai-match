@@ -153,6 +153,53 @@ function cleanPDFText(text) {
   cleaned = cleaned.replace(/(\w)\s+–\s+(\w)/g, '$1-$2'); // en-dash
   cleaned = cleaned.replace(/(\w)\s+—\s+(\w)/g, '$1-$2'); // em-dash
 
+  // Step 2.5: Fix extremely spaced text (per-character spacing from PDFs)
+  // Handles text like "M R . A M O L G A T H A D I" → "MR. AMOL GATHADI"
+  // And numbers: "9 0 9 6 9 4 7 2 9 4" → "9096947294"
+  // Process line by line to only fix heavily spaced lines
+  const spacedLines = cleaned.split('\n');
+  for (let li = 0; li < spacedLines.length; li++) {
+    const line = spacedLines[li];
+    const tokens = line.trim().split(/\s+/);
+    if (tokens.length < 4) continue;
+    const singleCharTokens = tokens.filter(t => t.length === 1).length;
+    const spacingRatio = singleCharTokens / tokens.length;
+    // If > 50% of tokens are single characters, this line has extreme per-char spacing
+    if (spacingRatio > 0.5 && singleCharTokens >= 4) {
+      // Strategy: collapse single-char sequences, using multi-char tokens and
+      // double spaces as word boundary indicators
+      let fixed = line;
+      // First: normalize multiple spaces to detect word boundaries (3+ spaces → double space marker)
+      fixed = fixed.replace(/\s{3,}/g, '  ');
+      // Iteratively collapse single-char gaps (preserving double-space word boundaries)
+      for (let iter = 0; iter < 10; iter++) {
+        const prev = fixed;
+        // Join single alphanumeric char + single space + single alphanumeric char
+        // But NOT across double spaces (word boundaries)
+        fixed = fixed.replace(/([A-Za-z0-9])\s([A-Za-z0-9])(?!\s\s)/g, (m, a, b, offset) => {
+          // Check if the space before 'a' is also a single space (part of same spaced word)
+          // or if 'a' is the start of a new word (preceded by double space or non-alpha)
+          return a + b;
+        });
+        if (prev === fixed) break;
+      }
+      // Also collapse punctuation that got spaced: ". " → "." when between letters
+      fixed = fixed.replace(/([A-Za-z])\s*\.\s*([A-Za-z])/g, '$1. $2');
+      // Collapse spaced digits: "9 0 9 6" → "9096"
+      for (let iter = 0; iter < 5; iter++) {
+        const prev = fixed;
+        fixed = fixed.replace(/(\d)\s(\d)/g, '$1$2');
+        if (prev === fixed) break;
+      }
+      // Restore word boundaries: add space before capital letters preceded by lowercase
+      fixed = fixed.replace(/([a-z])([A-Z])/g, '$1 $2');
+      // Clean up multiple spaces
+      fixed = fixed.replace(/\s{2,}/g, ' ');
+      spacedLines[li] = fixed;
+    }
+  }
+  cleaned = spacedLines.join('\n');
+
   // Step 3: Fix spaced single letters forming words (iterative - handles deeply broken text)
   for (let i = 0; i < 10; i++) {
     const prev = cleaned;
@@ -534,10 +581,19 @@ export async function parseResumeFile(fileBuffer, mimeType, filename) {
   }
 
   // Clean up extracted text (with fallback)
+  // IMPORTANT: cleanResumeText runs first (basic normalization), then cleanPDFText (PDF artifact fixes)
+  // Both MUST run BEFORE extractResumeData so skill matching sees clean text
   try {
     text = cleanResumeText(text || "");
   } catch {
     text = "";
+  }
+
+  // Clean PDF artifacts BEFORE extraction (fixes "E - COMMERCE" -> "E-COMMERCE", spaced words, etc.)
+  try {
+    text = cleanPDFText(text);
+  } catch {
+    // If cleanPDFText fails, continue with cleanResumeText output
   }
 
   // Extract structured data (with fallback)
@@ -557,13 +613,10 @@ export async function parseResumeFile(fileBuffer, mimeType, filename) {
   const isPDF = mimeType === "application/pdf" || extension === "pdf";
   const isImageBasedPDF = isPDF && wordCount < 30;
 
-  // Clean the text for better readability (fix PDF artifacts)
-  const cleanedText = cleanPDFText(text);
-
   // ALWAYS return success (graceful degradation)
   return {
     success: true,
-    text: cleanedText || "",
+    text: text || "",
     extractedData: extractedData || emptyExtractedData,
     wordCount: wordCount,
     isImageBasedPDF: isImageBasedPDF,
@@ -770,7 +823,7 @@ function extractResumeData(text) {
     suggestedRoles: [],
   };
 
-  // Extract email - handle spaced emails like "a nkitdutt87@gmail.com" or "adityarajput 98 3 @ gmail.com"
+  // Extract email - handle spaced emails like "a nkitdutt87@gmail.com" or "DEWAS.AGARWAL 3 @GMAIL.COM"
   // Strategy: First try line-by-line extraction to handle PDF spacing artifacts
   const emailLines = text.split('\n');
   for (const line of emailLines) {
@@ -778,21 +831,67 @@ function extractResumeData(text) {
       const trimmedLine = line.trim();
 
       // For shorter lines (likely dedicated email line), try multiple strategies
-      if (trimmedLine.length < 80) {
+      if (trimmedLine.length <= 80) {
         // Strategy A: Extract email directly from line (preserving word boundaries)
-        // This handles "Bengaluru, Karnataka 9113835789 sachinyadav18virat@gmail.com"
-        // by finding the email token among space-separated words
+        // This handles "sachinyadav18virat@gmail.com" as a clean word token
+        let emailFromWordToken = null;
         const words = trimmedLine.split(/\s+/);
         for (const word of words) {
           const cleanWord = word.replace(/[<>()[\]{},;]/g, '').toLowerCase();
           if (cleanWord.includes('@')) {
             const emailMatch = cleanWord.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
             if (emailMatch) {
-              data.email = emailMatch[0];
-              console.log(`[ResumeParser] Email extracted (word token): "${word}" -> "${emailMatch[0]}"`);
+              emailFromWordToken = emailMatch[0];
               break;
             }
           }
+        }
+
+        // Strategy A.5: Handle PDF character spacing around @ sign
+        // For cases like "DEWAS.AGARWAL 3 @GMAIL.COM" or "a nkitdutt87@gmail.com"
+        // Reconstruct by removing spaces from portion around @
+        let emailFromReconstruct = null;
+        const atIdx = trimmedLine.indexOf('@');
+        if (atIdx >= 0) {
+          const beforeAt = trimmedLine.substring(Math.max(0, atIdx - 30), atIdx);
+          const afterAt = trimmedLine.substring(atIdx + 1, Math.min(trimmedLine.length, atIdx + 25));
+          let cleanLocal = beforeAt.replace(/\s+/g, '').replace(/^[^a-zA-Z0-9]+/, '');
+          const cleanDomain = afterAt.replace(/\s+/g, '');
+          // Strip leading phone numbers (5+ consecutive digits) from local part
+          cleanLocal = cleanLocal.replace(/^\d{5,}/, '');
+          // Strip leading non-alphanumeric chars
+          cleanLocal = cleanLocal.replace(/^[^a-zA-Z0-9]+/, '');
+          if (cleanLocal.length >= 2) {
+            const candidate = cleanLocal + '@' + cleanDomain;
+            const tldEmailMatch = candidate.match(/[a-zA-Z0-9._%+-]{2,30}@[a-zA-Z0-9.-]+\.(?:com|org|net|edu|gov|io|co\.in|in|uk|us|info|ac\.in)/i);
+            if (tldEmailMatch) {
+              emailFromReconstruct = tldEmailMatch[0].toLowerCase();
+            }
+          }
+        }
+
+        // Choose best result: prefer reconstruct if it has a longer local part (more complete)
+        // This handles "a nkitdutt87@gmail.com" where word token gets "nkitdutt87@gmail.com"
+        // but reconstruct gets "ankitdutt87@gmail.com"
+        if (emailFromWordToken && emailFromReconstruct) {
+          const localA = emailFromWordToken.split('@')[0];
+          const localB = emailFromReconstruct.split('@')[0];
+          // Guard: if A's local part is already a suffix of B, A.5 just prepended name/garbage
+          // e.g., "nikhilcm" (A) vs "nikhilcmnikhilcm" (A.5) - A.5 grabbed "Nikhil CM" from name text
+          const isDuplicated = localB.length > localA.length && localB.endsWith(localA) && localA.length >= 5;
+          if (!isDuplicated && localB.length > localA.length && localB.length <= 30) {
+            data.email = emailFromReconstruct;
+            console.log(`[ResumeParser] Email extracted (reconstruct preferred over token): "${emailFromReconstruct}"`);
+          } else {
+            data.email = emailFromWordToken;
+            console.log(`[ResumeParser] Email extracted (word token${isDuplicated ? ', reconstruct was duplicated' : ''}): "${emailFromWordToken}"`);
+          }
+        } else if (emailFromReconstruct) {
+          data.email = emailFromReconstruct;
+          console.log(`[ResumeParser] Email extracted (spaced reconstruct): "${emailFromReconstruct}"`);
+        } else if (emailFromWordToken) {
+          data.email = emailFromWordToken;
+          console.log(`[ResumeParser] Email extracted (word token): "${emailFromWordToken}"`);
         }
         if (data.email) break;
 
@@ -814,21 +913,57 @@ function extractResumeData(text) {
         }
       }
 
-      // For any line with @, try to extract email portion
-      // Find @ position and extract surrounding characters, then clean
+      // For any line with @, try to extract email using word-boundary approach
+      // Build email by collecting words before and after @
       const atIndex = trimmedLine.indexOf('@');
       if (atIndex > 0) {
-        // Look backwards up to 40 chars for email local part
-        let start = Math.max(0, atIndex - 40);
-        // Look forwards up to 25 chars for domain
+        // Build local part: collect space-separated tokens before @, working backwards
+        const beforeAt = trimmedLine.substring(0, atIndex);
+        const afterAt = trimmedLine.substring(atIndex + 1);
+        const tokensBefore = beforeAt.split(/\s+/).filter(t => t.length > 0);
+        const tokensAfter = afterAt.split(/\s+/).filter(t => t.length > 0);
+
+        // Build local part from rightmost tokens
+        let localPart = '';
+        for (let ti = tokensBefore.length - 1; ti >= 0; ti--) {
+          const token = tokensBefore[ti].replace(/[<>()[\]{},;:|]/g, '').toLowerCase();
+          // Skip if token is only digits with 5+ chars (phone number)
+          if (/^\d{5,}$/.test(token)) continue;
+          // Skip if token is clearly not email (contains uppercase section-like words)
+          if (/^(phone|email|contact|mobile|tel|location|address|city|linkedin)$/i.test(token)) break;
+          const candidate = token + localPart;
+          // Stop if local part would exceed 25 chars (too long for email)
+          if (candidate.length > 25) break;
+          localPart = candidate;
+          // If we have a reasonable local part (> 5 chars), don't keep going unless next token is short (1-3 chars, likely split)
+          if (localPart.length > 5 && ti > 0) {
+            const nextToken = tokensBefore[ti - 1].replace(/[<>()[\]{},;:|]/g, '');
+            if (nextToken.length > 3) break;
+          }
+        }
+
+        // Build domain from first token after @
+        const domainToken = tokensAfter.length > 0 ? tokensAfter[0].replace(/[<>()[\]{},;:|]/g, '').toLowerCase() : '';
+
+        if (localPart.length >= 2 && domainToken.includes('.')) {
+          const candidate = localPart + '@' + domainToken;
+          const emailMatch = candidate.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+          if (emailMatch) {
+            data.email = emailMatch[0];
+            console.log(`[ResumeParser] Email extracted (word-boundary): "${emailMatch[0]}"`);
+            break;
+          }
+        }
+
+        // Fallback: original approach with space removal and TLD matching
+        let start = Math.max(0, atIndex - 30);
         let end = Math.min(trimmedLine.length, atIndex + 25);
         const emailPortion = trimmedLine.substring(start, end);
-        // Remove spaces but also strip leading digits/phone numbers that got mixed in
         let cleaned = emailPortion.replace(/\s+/g, '').toLowerCase();
-        // Remove leading non-email chars (phone numbers, city names stuck to email)
-        // Valid email local part starts with a letter or digit, but shouldn't have 5+ consecutive digits at start
-        cleaned = cleaned.replace(/^[^a-zA-Z]*\d{5,}/, ''); // Strip leading phone numbers
-        cleaned = cleaned.replace(/^[^a-zA-Z@]+/, ''); // Strip leading non-letter chars
+        // Strip leading phone numbers (5+ consecutive digits)
+        cleaned = cleaned.replace(/^\d{5,}/, '');
+        // Strip leading non-alphanumeric chars
+        cleaned = cleaned.replace(/^[^a-zA-Z0-9@]+/, '');
 
         // Try to extract with known TLDs first (most reliable)
         // These patterns match email ending at known TLD
@@ -1152,6 +1287,17 @@ function extractResumeData(text) {
       }
     }
 
+    // Validate extracted name: reject if any word is too long (likely stuck-together from spacing issues)
+    // e.g., "MR. AMOLGATHADI" has "AMOLGATHADI" (11 chars) which is not a real name word
+    if (data.name) {
+      const nameWords = data.name.replace(/^(MR\.?|MS\.?|MRS\.?|DR\.?|PROF\.?)\s+/i, '').split(/\s+/);
+      const hasStuckWord = nameWords.some(w => w.replace(/[.]/g, '').length > 10);
+      if (hasStuckWord) {
+        console.log(`[ResumeParser] Name "${data.name}" rejected - likely stuck-together text, falling back to email`);
+        data.name = null;
+      }
+    }
+
     // Third fallback: Try to extract name from email
     if (!data.name && data.email) {
       const emailParts = data.email.split('@')[0];
@@ -1297,11 +1443,11 @@ function extractResumeData(text) {
   const skillsSectionRegex = /(?:skills|technical skills|core competencies|key skills|areas of expertise|tools?\s*(?:&|and)\s*technologies)[\s:]*\n([\s\S]*?)(?:\n\s*\n|\n(?:[A-Z][A-Za-z\s]+:?\s*\n))/gi;
   const skillsSections = [];
   let sectionMatch;
-  while ((sectionMatch = skillsSectionRegex.exec(text)) !== null) {
+  while ((sectionMatch = skillsSectionRegex.exec(normalizedText)) !== null) {
     skillsSections.push(sectionMatch[0].toLowerCase());
   }
   // Also include lines that look like skill lists (comma/pipe separated, bullet lists)
-  const skillListLines = text.split('\n').filter(line => {
+  const skillListLines = normalizedText.split('\n').filter(line => {
     const trimmed = line.trim();
     // Lines with multiple commas or pipes that contain known skill words
     const separators = (trimmed.match(/[,|•]/g) || []).length;
@@ -1319,7 +1465,7 @@ function extractResumeData(text) {
     // Case-sensitive skills: must match exact case
     if (caseSensitiveSkills.includes(skill)) {
       const regex = new RegExp(`\\b${escapedSkill}\\b`);
-      if (regex.test(text)) {
+      if (regex.test(normalizedText)) {
         data.skills.push(skill);
       }
       continue;
@@ -1335,7 +1481,7 @@ function extractResumeData(text) {
 
       // Check if it appears 2+ times (indicating it's a core topic, not incidental)
       const globalRegex = new RegExp(`\\b${escapedLower}\\b`, 'gi');
-      const occurrences = (text.match(globalRegex) || []).length;
+      const occurrences = (normalizedText.match(globalRegex) || []).length;
 
       if (inSkillsSection || occurrences >= 2) {
         data.skills.push(skill);
@@ -1346,7 +1492,7 @@ function extractResumeData(text) {
     // Short skills or skills that are substrings: use word boundary matching (case-insensitive)
     if (skill.length <= 5 || needsWordBoundary.includes(skill)) {
       const regex = new RegExp(`\\b${escapedSkill}\\b`, 'i');
-      if (regex.test(text)) {
+      if (regex.test(normalizedText)) {
         data.skills.push(skill);
       }
     } else if (textLower.includes(skill.toLowerCase())) {
@@ -1365,7 +1511,7 @@ function extractResumeData(text) {
     const relatedSkills = RELATED_SKILLS_MAP[skill] || [];
     for (const relatedSkill of relatedSkills) {
       const relatedLower = relatedSkill.toLowerCase();
-      const resumeTextLower = text.toLowerCase();
+      const resumeTextLower = normalizedText.toLowerCase();
       if (!data.skills.some(s => s.toLowerCase() === relatedLower) &&
           !relatedSkillsToAdd.some(s => s.toLowerCase() === relatedLower)) {
         // Check if the FULL skill name (not just first word) appears in text
