@@ -220,6 +220,7 @@ export interface AssistantInput {
   locations?: string[];
   fullName?: string;
   email?: string;
+  phone?: string;
   totalExperience?: string;
   selectedSkills?: string[];
   userInfo?: {
