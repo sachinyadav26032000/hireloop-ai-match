@@ -24,7 +24,7 @@ import { createWorker } from "tesseract.js";
 // OCR worker instance (lazy init)
 let ocrWorker = null;
 
-console.log("[ResumeParser] Module loaded - VERSION 4.2 with heavily spaced PDF normalization");
+console.log("[ResumeParser] Module loaded - VERSION 4.3 with PDF text cleaning");
 
 // Common resume section headers to exclude from name detection (all lowercase)
 const SECTION_HEADERS = [
@@ -109,6 +109,62 @@ const RELATED_SKILLS_MAP = {
   "Performance Marketing": ["ROAS", "CAC", "Google Ads", "Meta Ads", "Analytics"],
   "Digital Marketing": ["SEO", "SEM", "Content Marketing", "Social Media", "Analytics"],
 };
+
+/**
+ * Clean PDF text artifacts for better readability
+ * Fixes common PDF extraction issues like spacing, bullets, and fragmented text
+ */
+function cleanPDFText(text) {
+  if (!text) return text;
+
+  let cleaned = text;
+
+  // Step 1: Fix spaces around hyphens (E - COMMERCE -> E-COMMERCE)
+  cleaned = cleaned.replace(/(\w)\s+-\s+(\w)/g, '$1-$2');
+  cleaned = cleaned.replace(/(\w)\s+–\s+(\w)/g, '$1-$2'); // en-dash
+
+  // Step 2: Fix spaced single letters forming words
+  // Pattern: uppercase letter + space + uppercase letter(s) (handles G ROWTH, O MNICHANNEL, etc.)
+  for (let i = 0; i < 10; i++) {
+    const prev = cleaned;
+    // Fix "G ROWTH" -> "GROWTH" (single letter + space + rest of word starting with uppercase)
+    cleaned = cleaned.replace(/\b([A-Z])\s+([A-Z]+[a-z]*)\b/g, '$1$2');
+    // Fix "C OR E" -> "CORE" (spaced all-caps fragments)
+    cleaned = cleaned.replace(/\b([A-Z]{1,3})\s+([A-Z]{1,3})\s+([A-Z]{1,3})\b/g, '$1$2$3');
+    // Fix patterns like "SKI LLS" -> "SKILLS"
+    cleaned = cleaned.replace(/\b([A-Z]{2,4})\s+([A-Z]{2,4})\b/g, '$1$2');
+    if (prev === cleaned) break;
+  }
+
+  // Step 3: Fix fragmented words with spaces (common PDF issue)
+  // "Presen t" -> "Present", "neutra l" -> "neutral"
+  cleaned = cleaned.replace(/(\w{3,})\s([a-z])\b/g, '$1$2');
+  // "E stablish ed" -> "Established"
+  cleaned = cleaned.replace(/\b([A-Z])\s([a-z]{2,})\s([a-z]{2,})\b/g, '$1$2$3');
+
+  // Step 4: Replace weird bullet characters with standard ones
+  cleaned = cleaned.replace(/[▪▸▹►▻●○◦◆◇■□★☆→⇒•‣⁃]/g, '•');
+
+  // Step 5: Fix multiple spaces
+  cleaned = cleaned.replace(/[ \t]+/g, ' ');
+
+  // Step 6: Fix space before punctuation
+  cleaned = cleaned.replace(/\s+([.,;:!?])/g, '$1');
+
+  // Step 7: Clean up line breaks (multiple -> double)
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+  // Step 8: Fix common PDF artifacts
+  cleaned = cleaned.replace(/\s*\|\s*/g, ' | '); // Normalize pipe separators
+  cleaned = cleaned.replace(/\(\s+/g, '('); // Fix space after opening paren
+  cleaned = cleaned.replace(/\s+\)/g, ')'); // Fix space before closing paren
+
+  // Step 9: Fix numbers with spaces (4 K Cr -> 4K Cr)
+  cleaned = cleaned.replace(/(\d)\s+([KMB])\s/g, '$1$2 ');
+  cleaned = cleaned.replace(/(\d)\s+%/g, '$1%');
+
+  return cleaned.trim();
+}
 
 /**
  * Detect mismatches between form data and resume data
@@ -406,10 +462,13 @@ export async function parseResumeFile(fileBuffer, mimeType, filename) {
   const isPDF = mimeType === "application/pdf" || extension === "pdf";
   const isImageBasedPDF = isPDF && wordCount < 30;
 
+  // Clean the text for better readability (fix PDF artifacts)
+  const cleanedText = cleanPDFText(text);
+
   // ALWAYS return success (graceful degradation)
   return {
     success: true,
-    text: text || "",
+    text: cleanedText || "",
     extractedData: extractedData || emptyExtractedData,
     wordCount: wordCount,
     isImageBasedPDF: isImageBasedPDF,
