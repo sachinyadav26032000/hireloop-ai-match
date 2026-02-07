@@ -81,6 +81,7 @@ router.post("/upload-resume", upload.single("resume"), async (req, res) => {
       linkedin: null,
       skills: [],
       suggestedRoles: [],
+      rawSkillTokens: [],
     },
   };
 

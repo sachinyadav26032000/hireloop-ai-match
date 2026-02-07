@@ -549,6 +549,7 @@ export async function parseResumeFile(fileBuffer, mimeType, filename) {
     experience: [],
     education: [],
     suggestedRoles: [],
+    rawSkillTokens: [],
   };
 
   let text = "";
@@ -732,15 +733,50 @@ async function parsePDF(buffer) {
 }
 
 /**
- * Attempt OCR for image-based PDFs
- * Returns empty string with logging if OCR unavailable/fails
+ * Attempt OCR for image-based PDFs using MuPDF + Tesseract.js
+ * MuPDF renders PDF pages to PNG images, Tesseract extracts text
  */
 async function parsePDFWithOCR(buffer) {
-  // OCR is complex to set up on Windows - for now just log and return empty
-  // User will need to paste text manually for image-based PDFs
-  console.log("[ResumeParser] Image-based PDF detected. OCR not available in this environment.");
-  console.log("[ResumeParser] Please copy and paste your resume text manually for best results.");
-  return "";
+  try {
+    const mupdf = await import("mupdf");
+    const doc = mupdf.default.Document.openDocument(buffer, "application/pdf");
+    const numPages = doc.countPages();
+
+    console.log(`[ResumeParser] OCR: Rendering ${numPages} page(s) with MuPDF...`);
+
+    // Initialize Tesseract worker (lazy, reuse across calls)
+    if (!ocrWorker) {
+      ocrWorker = await createWorker("eng");
+      console.log("[ResumeParser] OCR: Tesseract worker initialized");
+    }
+
+    let fullText = "";
+    const maxPages = Math.min(numPages, 5); // Cap at 5 pages for performance
+    const scale = 200 / 72; // 200 DPI for good OCR accuracy
+
+    for (let i = 0; i < maxPages; i++) {
+      const page = doc.loadPage(i);
+      const pixmap = page.toPixmap(
+        [scale, 0, 0, scale, 0, 0],
+        mupdf.default.ColorSpace.DeviceRGB,
+        false,
+        true
+      );
+      const pngBuffer = Buffer.from(pixmap.asPNG());
+      console.log(`[ResumeParser] OCR: Page ${i + 1} rendered (${Math.round(pngBuffer.length / 1024)}KB)`);
+
+      const { data: ocrData } = await ocrWorker.recognize(pngBuffer);
+      if (ocrData.text) {
+        fullText += ocrData.text + "\n\n";
+      }
+      console.log(`[ResumeParser] OCR: Page ${i + 1} extracted ${ocrData.text?.split(/\s+/).length || 0} words`);
+    }
+
+    return fullText.trim();
+  } catch (error) {
+    console.log("[ResumeParser] OCR failed (gracefully degrading):", error.message);
+    return "";
+  }
 }
 
 /**
@@ -809,6 +845,39 @@ function cleanResumeText(text) {
 }
 
 /**
+ * Extract raw skill tokens from detected skills sections.
+ * These are sent to the frontend for matching against its larger skill list.
+ */
+function extractRawSkillTokens(combinedSkillsContext) {
+  if (!combinedSkillsContext || combinedSkillsContext.trim().length === 0) return [];
+
+  // Section headers to filter out
+  const sectionHeaders = /^(skills|technical skills|core competencies|key skills|areas of expertise|tools?\s*(?:&|and)\s*technologies|proficiency|summary|experience|education|certifications?)\s*:?\s*$/i;
+
+  const tokens = combinedSkillsContext
+    // Split by common delimiters: commas, pipes, bullets, semicolons, newlines
+    .split(/[,|;•·●○■□▪▸►▹→\n\r\t]+/)
+    .map(t => t.replace(/[()[\]{}]/g, '').trim())
+    .filter(t => t.length >= 2 && t.length <= 50)
+    .filter(t => !sectionHeaders.test(t))
+    // Remove tokens that are just numbers or single common words
+    .filter(t => !/^\d+$/.test(t));
+
+  // Deduplicate case-insensitively, keep first occurrence
+  const seen = new Set();
+  const unique = [];
+  for (const token of tokens) {
+    const key = token.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(token);
+    }
+  }
+
+  return unique.slice(0, 100);
+}
+
+/**
  * Extract structured data from resume text using pattern matching
  */
 function extractResumeData(text) {
@@ -821,6 +890,7 @@ function extractResumeData(text) {
     experience: [],
     education: [],
     suggestedRoles: [],
+    rawSkillTokens: [],
   };
 
   // Extract email - handle spaced emails like "a nkitdutt87@gmail.com" or "DEWAS.AGARWAL 3 @GMAIL.COM"
@@ -1459,6 +1529,10 @@ function extractResumeData(text) {
   }).join('\n').toLowerCase();
 
   const combinedSkillsContext = skillsSections.join('\n') + '\n' + skillListLines;
+
+  // Extract raw skill tokens from skills sections for frontend matching
+  data.rawSkillTokens = extractRawSkillTokens(combinedSkillsContext);
+  console.log("[ResumeParser] Raw skill tokens:", data.rawSkillTokens.length, "tokens");
 
   // Skills that need word boundary matching to avoid false positives
   const needsWordBoundary = ["Java", "SQL", "AWS", "GCP", "Git", "CSS", "PHP", "Scala", "Rust", "Ruby", "JMS", "SQS", "SNS", "JPA", "PCF", "TDD", "BDD", "JWT", "SSL", "TLS", "PPC", "SEM", "SEO", "CRM", "ATS", "NLP", "SAP", "D2C", "GMV", "ARR", "CAC", "IPR", "SAFe"];

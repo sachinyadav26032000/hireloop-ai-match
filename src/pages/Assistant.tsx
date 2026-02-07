@@ -83,6 +83,7 @@ import {
   FileEdit,
   Users,
   Mail,
+  Phone,
   Star,
   Lightbulb,
   GraduationCap,
@@ -537,6 +538,7 @@ function AssistantContent() {
   const [location, setLocation] = useState("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [experienceYears, setExperienceYears] = useState("");
   const [experienceMonths, setExperienceMonths] = useState("0");
 
@@ -799,6 +801,7 @@ function AssistantContent() {
         locations: location ? [location] : undefined,
         fullName,
         email,
+        phone,
         totalExperience,
         selectedSkills,
       });
@@ -854,7 +857,7 @@ function AssistantContent() {
     try {
       const result = await assistantApi.generateCV(
         profileAnalysis,
-        { fullName, email, location },
+        { fullName, email, phone, location },
         resumeText
       );
 
@@ -970,12 +973,15 @@ function AssistantContent() {
         success: boolean;
         data: {
           text: string;
+          wordCount: number;
           extractedData: {
             name: string | null;
             email: string | null;
+            phone: string | null;
             linkedin: string | null;
             skills: string[];
             suggestedRoles: string[];
+            rawSkillTokens?: string[];
           };
         };
         suggestions?: {
@@ -985,7 +991,10 @@ function AssistantContent() {
           primaryDomain: string | null;
           aiGenerated: boolean;
         };
+        message?: string;
       };
+
+      console.log('[Resume Upload] Full API response:', JSON.stringify(result, null, 2));
 
       if (result?.success && result?.data) {
         const { text, extractedData } = result.data;
@@ -1013,6 +1022,13 @@ function AssistantContent() {
           filledFields.push("Email");
         }
 
+        // AUTO-FILL PHONE
+        if (extractedData?.phone) {
+          setPhone(extractedData.phone);
+          setTouched(prev => ({ ...prev, phone: true }));
+          filledFields.push("Phone");
+        }
+
         // AUTO-FILL LINKEDIN URL
         if (extractedData?.linkedin) {
           setLinkedinUrl(extractedData.linkedin);
@@ -1021,11 +1037,23 @@ function AssistantContent() {
         }
 
         // AUTO-SELECT SKILLS (TOP 10 from resume)
-        const skillsToUse = (suggestions?.skills && suggestions.skills.length > 0)
+        // Merge backend-detected skills with raw skill tokens from resume's skills sections
+        const backendSkills = (suggestions?.skills && suggestions.skills.length > 0)
           ? suggestions.skills
           : extractedData?.skills || [];
+        const rawTokens = extractedData?.rawSkillTokens || [];
+        // Deduplicate: backend skills first, then raw tokens (case-insensitive)
+        const seenLower = new Set(backendSkills.map(s => s.toLowerCase()));
+        const mergedSkills = [...backendSkills];
+        for (const token of rawTokens) {
+          if (!seenLower.has(token.toLowerCase())) {
+            seenLower.add(token.toLowerCase());
+            mergedSkills.push(token);
+          }
+        }
+        const skillsToUse = mergedSkills;
 
-        console.log('[Resume Upload] Skills from backend:', skillsToUse);
+        console.log('[Resume Upload] Skills from backend:', backendSkills.length, '+ raw tokens:', rawTokens.length, '= merged:', skillsToUse.length);
 
         if (skillsToUse.length > 0) {
           // Match skills against our predefined skill list (ALL_SKILLS is array of {value, label, category})
@@ -1068,12 +1096,36 @@ function AssistantContent() {
         console.log('[Resume Upload] Suggested roles from backend:', extractedData?.suggestedRoles);
 
         if (extractedData?.suggestedRoles && extractedData.suggestedRoles.length > 0) {
-          // ALL_ROLES is array of {value, label, category} - match against value
+          // ALL_ROLES is array of {value, label, category} - fuzzy match against value
           const matchedRoles: string[] = [];
+          const stopWords = new Set(["and", "the", "of", "in", "a", "an", "for", "to", "with", "at", "on", "by"]);
+          const getSignificantWords = (str: string) =>
+            str.toLowerCase().split(/[\s/&-]+/).filter(w => w.length > 1 && !stopWords.has(w));
 
           for (const role of extractedData.suggestedRoles) {
             const roleLower = role.toLowerCase();
-            const match = ALL_ROLES.find(r => r.value.toLowerCase() === roleLower);
+
+            // Tier 1: Exact case-insensitive match
+            let match = ALL_ROLES.find(r => r.value.toLowerCase() === roleLower);
+
+            // Tier 2: Substring contains (e.g. "Backend Developer" in "Senior Backend Developer")
+            if (!match) {
+              match = ALL_ROLES.find(r =>
+                r.value.toLowerCase().includes(roleLower) ||
+                roleLower.includes(r.value.toLowerCase())
+              );
+            }
+
+            // Tier 3: Word overlap (2+ significant words match)
+            if (!match) {
+              const roleWords = getSignificantWords(role);
+              match = ALL_ROLES.find(r => {
+                const candidateWords = getSignificantWords(r.value);
+                const overlap = roleWords.filter(w => candidateWords.includes(w)).length;
+                return overlap >= 2;
+              });
+            }
+
             if (match && !matchedRoles.includes(match.value)) {
               matchedRoles.push(match.value);
             }
@@ -1324,7 +1376,7 @@ function AssistantContent() {
                     description={resumeAutoFilled ? "Auto-filled from your resume • Edit if needed" : "Basic details for your profile"}
                     required
                   />
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-11">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pl-11">
                     <div className="space-y-2">
                       <Label htmlFor="name" className={labelClass}>
                         Full Name *
@@ -1399,6 +1451,29 @@ function AssistantContent() {
                           Add missing detail
                         </p>
                       )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="phone" className={labelClass}>
+                        Phone
+                        {autoFilledFields.includes("Phone") && (
+                          <Badge variant="outline" className="ml-2 text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                            Auto-filled
+                          </Badge>
+                        )}
+                      </Label>
+                      <Input
+                        id="phone"
+                        type="tel"
+                        autoComplete="off"
+                        placeholder={resumeAutoFilled && !phone ? "Add your phone number" : "+91 98765 43210"}
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className={cn(
+                          inputClass,
+                          "transition-all duration-200",
+                          autoFilledFields.includes("Phone") && phone ? 'border-emerald-500/30' : ''
+                        )}
+                      />
                     </div>
                   </div>
                 </div>
