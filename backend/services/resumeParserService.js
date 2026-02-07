@@ -301,7 +301,62 @@ function cleanPDFText(text) {
   // Lines that are just a single character
   cleaned = cleaned.replace(/^\s*[a-zA-Z]\s*$/gm, '');
 
-  // Step 14: Final cleanup
+  // Step 14: Fix broken "tion/sion" words from PDF line-break splits
+  // "retenti on" -> "retention", "Communicati on" -> "Communication", "collaborati on" -> "collaboration"
+  cleaned = cleaned.replace(/([a-zA-Z]{2,}ti)\s+(on|ons|onal|onally|oning)\b/g, '$1$2');
+  cleaned = cleaned.replace(/([a-zA-Z]{2,}si)\s+(on|ons|onal|onally|oning|ve|vely)\b/g, '$1$2');
+  cleaned = cleaned.replace(/([a-zA-Z]{2,}ci)\s+(al|ally|ous|ously|es|ent|ently|ency|encies)\b/g, '$1$2');
+  // "Softw are" -> "Software", "hardw are" -> "hardware"
+  cleaned = cleaned.replace(/\b([Ss]oftw)\s+(are)\b/g, '$1$2');
+  cleaned = cleaned.replace(/\b([Hh]ardw)\s+(are)\b/g, '$1$2');
+  // "Childc are" -> "Childcare", "healthc are" -> "healthcare"
+  cleaned = cleaned.replace(/([a-zA-Z]{3,})c\s+are\b/g, '$1care');
+
+  // Step 15: Fix common stuck words (missing space between words)
+  // Safe exact-match replacements only - won't break real words
+  const stuckPairs = [
+    // Articles/prepositions stuck to next word
+    [/\bwitha\b/gi, 'with a'], [/\bwithan\b/gi, 'with an'], [/\bwiththe\b/gi, 'with the'],
+    [/\bfroma\b/gi, 'from a'], [/\bfroman\b/gi, 'from an'], [/\bfromthe\b/gi, 'from the'],
+    [/\bforthe\b/gi, 'for the'], [/\bfora\b/gi, 'for a'], [/\bforan\b/gi, 'for an'],
+    [/\bandthe\b/gi, 'and the'], [/\banda\b/gi, 'and a'], [/\bandan\b/gi, 'and an'],
+    [/\bofthe\b/gi, 'of the'], [/\bofa\b/gi, 'of a'], [/\bofan\b/gi, 'of an'],
+    [/\binthe\b/gi, 'in the'], [/\bina\b/gi, 'in a'], [/\binan\b/gi, 'in an'],
+    [/\bonthe\b/gi, 'on the'], [/\btothe\b/gi, 'to the'],
+    [/\batthe\b/gi, 'at the'], [/\bbythe\b/gi, 'by the'],
+    [/\basthe\b/gi, 'as the'], [/\basa\b/gi, 'as a'],
+    // Common verb+preposition combos from PDF extraction
+    [/\bAdeptat\b/g, 'Adept at'], [/\badeptat\b/g, 'adept at'],
+    [/\bResultsin\b/g, 'Results in'], [/\bresultsin\b/g, 'results in'],
+    [/\bSkilledin\b/g, 'Skilled in'], [/\bskilledin\b/g, 'skilled in'],
+    [/\bbasedon\b/gi, 'based on'], [/\bfocusedon\b/gi, 'focused on'],
+    [/\bworkedon\b/gi, 'worked on'], [/\bworkedwith\b/gi, 'worked with'],
+    [/\bleadingto\b/gi, 'leading to'], [/\bleadingthe\b/gi, 'leading the'],
+    [/\bresultingin\b/gi, 'resulting in'],
+    [/\bresponsiblefor\b/gi, 'responsible for'],
+    [/\bofspecial\b/gi, 'of special'],
+  ];
+  for (const [regex, replacement] of stuckPairs) {
+    cleaned = cleaned.replace(regex, replacement);
+  }
+
+  // Fix "maintaininga" -> "maintaining a", "creatinga" -> "creating a"
+  // Safe: word ending in "ing" + single letter "a" is never a real word
+  cleaned = cleaned.replace(/\b([a-zA-Z]{4,}ing)(a)\b/gi, '$1 $2');
+
+  // Broader stuck word fix: common prepositions stuck after a word ending in specific patterns
+  // "leveragingdeep" -> "leveraging deep", "deliveringhigh" -> "delivering high"
+  // Pattern: word ending in "ing/ted/ble/ive/ous" + lowercase word
+  cleaned = cleaned.replace(/\b([a-zA-Z]{4,}(?:ing|ted|ble|ive|ous|ant|ent|ful))([a-z]{3,})\b/g, (match, p1, p2) => {
+    // Don't split actual words - check if the full match looks like one word
+    // Common suffixes that form real words: "something", "nothing", "everything", "interesting"
+    const fullLower = match.toLowerCase();
+    const realWords = ['something', 'nothing', 'everything', 'anything', 'interesting', 'outstanding', 'understanding', 'engineering', 'marketing', 'consulting', 'manufacturing', 'advertising', 'broadcasting', 'entertaining', 'representing', 'implementing', 'contributing', 'distributing', 'investigating', 'negotiating', 'facilitating', 'collaborating', 'communicating', 'demonstrating', 'coordinating', 'administrating', 'anticipated', 'complicated', 'integrated', 'automated', 'dedicated', 'motivated', 'innovative', 'competitive', 'productive', 'objective', 'effective', 'sensitive', 'proactive', 'alternative', 'comprehensive', 'progressive', 'responsive', 'aggressive', 'impressive', 'sustainable', 'considerable', 'comfortable', 'responsible', 'accountable', 'transferable', 'adaptable', 'accessible', 'achievable', 'applicable', 'adjustable', 'considerable', 'available', 'vulnerable', 'excellent', 'proficient', 'sufficient', 'efficient', 'resilient', 'consistent', 'persistent', 'independent', 'transparent', 'significant', 'intelligent', 'confident', 'competent', 'resultant', 'important', 'relevant', 'redundant', 'compliant', 'consultant', 'resourceful', 'successful', 'meaningful', 'respectful', 'thoughtful', 'delightful', 'impactful', 'insightful', 'beautiful', 'powerful', 'wonderful', 'plentiful', 'bountiful', 'ungrateful'];
+    if (realWords.includes(fullLower)) return match;
+    return p1 + ' ' + p2;
+  });
+
+  // Step 16: Final cleanup
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n'); // Re-clean excess newlines from removals
   cleaned = cleaned.replace(/[ \t]+/g, ' '); // Re-clean spaces
 
