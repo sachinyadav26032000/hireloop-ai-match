@@ -206,8 +206,8 @@ export async function generateCV(input) {
   const experienceLevel = profileAnalysis?.experienceLevel || "mid";
   const years = profileAnalysis?.yearsOfExperience || 0;
 
-  // Parse experience and education from resume
-  const parsedExperience = input.parsedExperience || parseResumeForExperience(existingResume);
+  // Parse experience and education from resume (use detailed parser for better results)
+  const parsedExperience = input.parsedExperience || parseExperienceDetailed(existingResume) || parseResumeForExperience(existingResume);
   const parsedEducation = input.parsedEducation || parseResumeForEducation(existingResume);
   const certifications = input.parsedCertifications || [];
 
@@ -373,112 +373,169 @@ function parseExperienceDetailed(resumeText) {
   const experience = [];
   const lines = resumeText.split("\n").map(l => l.trim()).filter(l => l.length > 0);
 
-  // Multiple patterns to detect experience section
+  // --- Section header detection (broad) ---
   const expSectionPatterns = [
-    /^(work\s*)?experience$/i,
-    /^employment(\s*history)?$/i,
-    /^professional\s*(experience|background|history)$/i,
-    /^career\s*(history|summary)$/i,
-    /^work\s*history$/i,
+    /^(work\s*)?experience\s*:?$/i,
+    /^employment(\s*history)?\s*:?$/i,
+    /^professional\s*(experience|background|history)\s*:?$/i,
+    /^career\s*(history|summary|overview)\s*:?$/i,
+    /^work\s*history\s*:?$/i,
+    /^relevant\s*experience\s*:?$/i,
+    /^industry\s*experience\s*:?$/i,
   ];
 
   const endSectionPatterns = [
-    /^education$/i,
-    /^skills$/i,
-    /^technical\s*skills$/i,
-    /^certifications?$/i,
-    /^projects?$/i,
-    /^awards?$/i,
-    /^achievements?$/i,
-    /^languages?$/i,
-    /^interests?$/i,
-    /^references?$/i,
-    /^personal\s*(details|information)?$/i,
+    /^education(al)?(\s*(background|qualifications?|details?))?\s*:?$/i,
+    /^(technical\s*)?skills?\s*:?$/i,
+    /^(core\s*)?competenc(ies|y)\s*:?$/i,
+    /^certifications?\s*(&\s*licenses?)?\s*:?$/i,
+    /^projects?\s*:?$/i,
+    /^awards?\s*(&\s*honors?)?\s*:?$/i,
+    /^achievements?\s*:?$/i,
+    /^languages?\s*:?$/i,
+    /^interests?\s*(&\s*hobbies?)?\s*:?$/i,
+    /^references?\s*:?$/i,
+    /^personal\s*(details?|information|profile)?\s*:?$/i,
+    /^(key\s*)?tools?\s*(&|and)?\s*technolog(ies|y)\s*:?$/i,
+    /^publications?\s*:?$/i,
+    /^volunteer(ing)?\s*(experience)?\s*:?$/i,
+    /^(extra[\s-]?curricular\s*)?activities\s*:?$/i,
+    /^areas?\s*of\s*expertise\s*:?$/i,
   ];
 
-  // Date patterns for job entries
+  // End section must be a short standalone header line (< 50 chars), not embedded in longer text
+  function isEndSectionHeader(line) {
+    return line.length < 50 && endSectionPatterns.some(p => p.test(line));
+  }
+
+  // --- Date patterns (comprehensive) ---
+  // Note: [.,\-]? between month and year handles "Feb-2020", "Jun.2020", "Mar,2020"
   const datePatterns = [
-    /(\d{4})\s*[-–to]+\s*(\d{4}|present|current|now|ongoing)/i,
-    /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[\s,]*(\d{4})\s*[-–to]+\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)?[a-z]*[\s,]*(\d{4}|present|current|now)/i,
-    /(\d{1,2}\/\d{4})\s*[-–to]+\s*(\d{1,2}\/\d{4}|present|current)/i,
-    /(since|from)\s*(\d{4})/i,
+    // "2020 - 2023", "2020 – Present", "2020 to 2023", "2020 - tilldate"
+    /(\d{4})\s*[-–—to]+\s*(\d{4}|present|current|now|ongoing|till\s*date|tilldate|date)/i,
+    // "Jan 2020 - Dec 2023", "June-2022 to Present", "Feb-2020 to Jan-2020", "Mar 2020 - present"
+    // [.,\-]? allows period/comma/hyphen between month and year
+    /(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)[.,\-]?\s*['']?(\d{2,4})\s*[-–—to]+\s*(?:(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)[.,\-]?\s*)?['']?(\d{2,4}|present|current|now|ongoing|till\s*date|tilldate)/i,
+    // "Jul'19 - Dec'22", "Jan'20 - Present", "Sep'17 - Apr'21" (Naukri apostrophe format)
+    /(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)[''](\d{2,4})\s*[-–—to]+\s*(?:(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)['']?)?(\d{2,4}|present|current|now|ongoing|till\s*date|tilldate)/i,
+    // "'19 - '22", "'20 - present" (short apostrophe year format)
+    /[''](\d{2})\s*[-–—to]+\s*['']?(\d{2}|present|current|now|tilldate|till\s*date)/i,
+    // "(2020 - 2023)", "(Jan 2020 - Present)" (parenthesized dates)
+    /\(\s*(?:\w+\s*)?(\d{4})\s*[-–—to]+\s*(?:\w+\s*)?(\d{4}|present|current|now|tilldate|till\s*date)\s*\)/i,
+    // "01/2020 - 12/2023", "1/2020 – Present"
+    /(\d{1,2}\/\d{2,4})\s*[-–—to]+\s*(\d{1,2}\/\d{2,4}|present|current)/i,
+    // "Since 2020", "From 2020"
+    /(since|from)\s+['']?(\d{4})/i,
   ];
 
-  let inExperienceSection = false;
+  function lineHasDate(line) {
+    return datePatterns.some(p => p.test(line));
+  }
+
+  function extractDateFromLine(line) {
+    for (const pattern of datePatterns) {
+      const match = line.match(pattern);
+      if (match) return match[0];
+    }
+    return "";
+  }
+
+  // --- Job title keywords (expanded) ---
+  const JOB_TITLE_WORDS = /\b(engineer|developer|programmer|manager|analyst|executive|director|consultant|specialist|lead|head|architect|designer|coordinator|officer|president|vice\s*president|vp|ceo|cto|cfo|coo|intern|trainee|associate|senior|junior|staff|principal|technician|administrator|supervisor|assistant|secretary|accountant|advisor|representative|operator|scientist|researcher|professor|instructor|teacher|nurse|therapist|physician|counsel|advocate|planner|strategist|recruiter|founder|partner|freelancer?)\b/i;
+
+  // --- Company indicator words ---
+  const COMPANY_WORDS = /\b(pvt|ltd|inc|corp|llc|llp|limited|solutions|technologies|technology|tech|services|consulting|consultancy|systems|software|group|global|international|ventures|labs?|studio|agency|network|media|digital|infotech|infosys|wipro|tcs|cognizant|accenture|deloitte|amazon|google|microsoft|apple|meta|facebook|flipkart|uber|ola|swiggy|zomato|paytm|razorpay)\b/i;
+
+  function looksLikeJobTitle(text) {
+    return JOB_TITLE_WORDS.test(text);
+  }
+  function looksLikeCompany(text) {
+    return COMPANY_WORDS.test(text);
+  }
+  function isBulletLine(line) {
+    return /^[•●○■▪►▸▹→\-\*~]\s+/.test(line) || /^\d+[.)]\s+/.test(line) || /^[➤➢❖✓✔]\s*/.test(line);
+  }
+  function cleanBullet(line) {
+    return line.replace(/^[•●○■▪►▸▹→\-\*~➤➢❖✓✔]\s*/, "").replace(/^\d+[.)]\s*/, "").trim();
+  }
+
+  // --- PASS 1: Find experience section boundaries ---
+  let expStartIndex = -1;
+  let expEndIndex = lines.length;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (expSectionPatterns.some(p => p.test(lines[i]))) {
+      expStartIndex = i + 1; // Start AFTER the header
+      break;
+    }
+  }
+
+  // If no explicit header, scan for first line with a date + job indicator
+  if (expStartIndex === -1) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (lineHasDate(line) && (looksLikeJobTitle(line) || looksLikeCompany(line) || line.length > 15)) {
+        expStartIndex = i;
+        break;
+      }
+      // Check title on this line + date on next
+      if (looksLikeJobTitle(line) && i + 1 < lines.length && lineHasDate(lines[i + 1])) {
+        expStartIndex = i;
+        break;
+      }
+    }
+  }
+
+  if (expStartIndex === -1) {
+    console.log("[CV Generation] No experience section found in resume");
+    return [];
+  }
+
+  // Find where experience section ends (only match short standalone section headers)
+  for (let i = expStartIndex; i < lines.length; i++) {
+    if (isEndSectionHeader(lines[i])) {
+      expEndIndex = i;
+      break;
+    }
+  }
+
+  console.log(`[CV Generation] Experience section: lines ${expStartIndex}-${expEndIndex} of ${lines.length}`);
+
+  // --- PASS 2: Parse job entries within the section ---
   let currentJob = null;
   let bullets = [];
 
-  // First pass: find experience section start
-  let expStartIndex = -1;
-  for (let i = 0; i < lines.length; i++) {
+  for (let i = expStartIndex; i < expEndIndex; i++) {
     const line = lines[i];
-    if (expSectionPatterns.some(p => p.test(line))) {
-      expStartIndex = i;
-      inExperienceSection = true;
-      break;
-    }
-  }
 
-  // If no explicit section header, try to find job entries directly
-  if (expStartIndex === -1) {
-    // Look for lines that have job-like patterns (title + company + date)
-    for (let i = 0; i < Math.min(lines.length, 30); i++) {
-      const line = lines[i];
-      const hasDate = datePatterns.some(p => p.test(line));
-      const hasJobIndicator = /\b(at|@|•|\|)\b/i.test(line) ||
-                              /\b(pvt|ltd|inc|corp|llc|company|limited)\b/i.test(line);
-      if (hasDate && (hasJobIndicator || line.length > 20)) {
-        expStartIndex = Math.max(0, i - 1);
-        inExperienceSection = true;
-        break;
-      }
-    }
-  }
+    // Skip empty-looking lines and section headers
+    if (line.length < 3) continue;
+    if (expSectionPatterns.some(p => p.test(line))) continue;
 
-  // Start from experience section or beginning
-  const startIdx = expStartIndex >= 0 ? expStartIndex : 0;
+    const hasDate = lineHasDate(line);
+    const hasJobTitle = looksLikeJobTitle(line);
+    const hasCompanyWord = looksLikeCompany(line);
+    const nextLine = i + 1 < expEndIndex ? lines[i + 1] : "";
+    const nextHasDate = lineHasDate(nextLine);
+    const isBullet = isBulletLine(line);
 
-  for (let i = startIdx; i < lines.length; i++) {
-    const line = lines[i];
-    const lineLower = line.toLowerCase();
+    // --- Detect new job entry ---
+    // A new job entry is signaled by: a date on the line, OR a title/company line followed by date on the next line
+    // BUT: a date-only line (< 30 chars, just a date range) should attach to previous/next title, not be standalone
+    const dateStr = extractDateFromLine(line);
+    const lineWithoutDate = dateStr ? line.replace(dateStr, "").trim() : line;
+    const isDateOnlyLine = hasDate && lineWithoutDate.length < 5 && line.length < 40;
 
-    // Skip the section header itself
-    if (expSectionPatterns.some(p => p.test(line))) {
-      inExperienceSection = true;
-      continue;
-    }
+    // Also check 2 lines ahead for dates (title, company, date on 3 lines)
+    const line2Ahead = i + 2 < expEndIndex ? lines[i + 2] : "";
+    const twoAheadHasDate = lineHasDate(line2Ahead);
 
-    // Detect end of experience section
-    if (inExperienceSection && endSectionPatterns.some(p => p.test(line))) {
-      if (currentJob) {
-        currentJob.bullets = enhanceBulletPoints(bullets);
-        if (currentJob.title || currentJob.company) {
-          experience.push(currentJob);
-        }
-      }
-      break;
-    }
+    const isNewJobEntry =
+      (hasDate && !isBullet && !isDateOnlyLine && line.length < 200) ||
+      (hasJobTitle && (nextHasDate || twoAheadHasDate) && !isBullet && line.length < 150) ||
+      (hasCompanyWord && (hasDate || nextHasDate || twoAheadHasDate) && !isBullet && line.length < 150);
 
-    // Check if this line contains a date (potential job entry)
-    let dateMatch = null;
-    for (const pattern of datePatterns) {
-      const match = line.match(pattern);
-      if (match) {
-        dateMatch = match;
-        break;
-      }
-    }
-
-    // Also check next line for date (some resumes put date on separate line)
-    let nextLineHasDate = false;
-    if (i + 1 < lines.length) {
-      nextLineHasDate = datePatterns.some(p => p.test(lines[i + 1]));
-    }
-
-    // Detect job entry (has date or looks like job title)
-    const isJobTitle = /\b(engineer|developer|manager|analyst|executive|director|consultant|specialist|lead|head|architect|designer|coordinator|officer|president|vp|ceo|cto|cfo)\b/i.test(line);
-
-    if ((dateMatch || (isJobTitle && nextLineHasDate)) && line.length > 5 && line.length < 200) {
+    if (isNewJobEntry) {
       // Save previous job
       if (currentJob) {
         currentJob.bullets = enhanceBulletPoints(bullets);
@@ -488,97 +545,160 @@ function parseExperienceDetailed(resumeText) {
         bullets = [];
       }
 
-      // Parse job entry - various formats
-      // Format 1: "Title at Company • Location | Date"
-      // Format 2: "Title | Company | Date"
-      // Format 3: "Company - Title (Date)"
-      // Format 4: "Title" on one line, "Company" on next
-
       let title = "";
       let company = "";
       let location = "";
-      let duration = "";
+      let duration = extractDateFromLine(line);
 
-      // Extract duration from date match
-      if (dateMatch) {
-        const fullMatch = dateMatch[0];
-        duration = fullMatch.replace(/[-–]+/g, " - ").trim();
-        // Remove date from line for further parsing
-        const lineWithoutDate = line.replace(fullMatch, "").trim();
+      // Remove date from line for parsing
+      let lineWithoutDate = line;
+      if (duration) {
+        lineWithoutDate = line.replace(duration, "").trim();
+        // Also clean surrounding parens/brackets
+        lineWithoutDate = lineWithoutDate.replace(/^\(|\)$/g, "").replace(/\(\s*\)/, "").trim();
+      }
 
-        // Parse remaining text
-        const parts = lineWithoutDate.split(/\s*[•|@]\s*|\s+at\s+|\s*[-–]\s*/i).filter(p => p.trim());
+      // Clean trailing/leading separators
+      lineWithoutDate = lineWithoutDate.replace(/^[\s•|,\-–]+|[\s•|,\-–]+$/g, "").trim();
+
+      // Handle "with Company as Title" format (common in Naukri resumes)
+      // e.g. "with Khazana Jewellery as Business Head-Jewellery"
+      const withAsMatch = lineWithoutDate.match(/^(?:with\s+)(.+?)\s+as\s+(.+)$/i);
+      if (withAsMatch) {
+        company = withAsMatch[1].trim();
+        title = withAsMatch[2].trim();
+      }
+
+      // Handle "Title, Company" or "Title - Company" if not already parsed
+      if (!title && !company) {
+        // Split by common delimiters: |, •, " at ", " - " (but not inside words like "Full-Stack")
+        const parts = lineWithoutDate
+          .split(/\s*[•|]\s*|\s+at\s+|\s+@\s+/)
+          .map(p => p.trim())
+          .filter(p => p.length > 0);
 
         if (parts.length >= 2) {
-          // Check which part is title vs company
-          const firstIsTitle = /\b(engineer|developer|manager|analyst|lead|head|director|specialist)\b/i.test(parts[0]);
-          if (firstIsTitle) {
-            title = parts[0].trim();
-            company = parts[1].trim();
-            if (parts[2]) location = parts[2].trim();
+          // Determine which part is title vs company
+          if (looksLikeJobTitle(parts[0]) && !looksLikeJobTitle(parts[1])) {
+            title = parts[0];
+            company = parts[1];
+            if (parts[2]) location = parts[2];
+          } else if (looksLikeCompany(parts[0])) {
+            company = parts[0];
+            title = parts[1];
+            if (parts[2]) location = parts[2];
+          } else if (looksLikeJobTitle(parts[1])) {
+            company = parts[0];
+            title = parts[1];
+            if (parts[2]) location = parts[2];
           } else {
-            // Could be company first
-            company = parts[0].trim();
-            title = parts[1].trim();
+            // Guess: first part is title (shorter often = title)
+            title = parts[0];
+            company = parts[1];
           }
         } else if (parts.length === 1) {
-          // Just one part - likely title, check next line for company
-          title = parts[0].trim();
-          if (i + 1 < lines.length && !datePatterns.some(p => p.test(lines[i + 1]))) {
-            company = lines[i + 1].trim().split(/\s*[•|]\s*/)[0];
+        const singlePart = parts[0];
+        // Check next line for the missing piece (title or company)
+        if (looksLikeJobTitle(singlePart)) {
+          title = singlePart;
+        } else if (looksLikeCompany(singlePart)) {
+          company = singlePart;
+        } else {
+          title = singlePart;
+        }
+
+        // Look at subsequent non-bullet, non-date line for company/title
+        if (i + 1 < expEndIndex) {
+          const peek = lines[i + 1];
+          const peekHasDate = lineHasDate(peek);
+          const peekIsBullet = isBulletLine(peek);
+          if (!peekIsBullet && peek.length < 150) {
+            let peekDuration = extractDateFromLine(peek);
+            let peekText = peek;
+            if (peekDuration) {
+              if (!duration) duration = peekDuration;
+              peekText = peek.replace(peekDuration, "").replace(/^\(|\)$/g, "").trim();
+              peekText = peekText.replace(/^[\s•|,\-–]+|[\s•|,\-–]+$/g, "").trim();
+            }
+            if (peekText.length > 0 && peekText.length < 120) {
+              // Split peek line by separators too
+              const peekParts = peekText.split(/\s*[•|]\s*/).map(p => p.trim()).filter(p => p.length > 0);
+              if (!company && !title) {
+                title = peekParts[0] || "";
+                company = peekParts[1] || "";
+              } else if (!company) {
+                company = peekParts[0] || "";
+                if (peekParts[1] && !location) location = peekParts[1];
+              } else if (!title) {
+                title = peekParts[0] || "";
+              }
+              // Skip this peeked line
+              if (!peekHasDate || peekDuration) i++;
+            }
           }
         }
-      } else if (isJobTitle) {
+      }
+      } // close if (!title && !company)
+
+      // Title-only line (no date on this line), look ahead for company + date
+      if (!title && !company && !duration && !hasDate && hasJobTitle) {
         title = line.trim();
-        // Look at next lines for company and date
-        if (i + 1 < lines.length) {
-          const nextLine = lines[i + 1];
-          const nextDateMatch = datePatterns.find(p => p.test(nextLine));
-          if (nextDateMatch) {
-            duration = nextLine.match(nextDateMatch)?.[0] || "";
-            company = nextLine.replace(duration, "").trim().split(/\s*[•|]\s*/)[0];
-          } else {
-            company = nextLine.trim().split(/\s*[•|]\s*/)[0];
+        if (i + 1 < expEndIndex) {
+          const peek = lines[i + 1];
+          duration = extractDateFromLine(peek);
+          let peekText = peek;
+          if (duration) peekText = peek.replace(duration, "").trim();
+          peekText = peekText.replace(/^[\s•|,\-–]+|[\s•|,\-–]+$/g, "").trim();
+          if (peekText) company = peekText.split(/\s*[•|]\s*/)[0].trim();
+          i++;
+        }
+      }
+
+      // Clean final values
+      title = title.replace(/[•|].*$/, "").replace(/,$/, "").trim();
+      company = company.replace(/[•|].*$/, "").replace(/,$/, "").trim();
+      // Don't strip company suffixes - keep them for accuracy
+      location = location.replace(/[•|].*$/, "").replace(/,$/, "").trim();
+
+      // Swap if title looks like a company and company looks like a title
+      if (looksLikeCompany(title) && looksLikeJobTitle(company)) {
+        [title, company] = [company, title];
+      }
+
+      // Duration normalization
+      duration = duration.replace(/[-–—]+/g, " - ").trim();
+
+      currentJob = { title, company, duration, location, bullets: [] };
+    } else if (isDateOnlyLine && currentJob && !currentJob.duration) {
+      // Date-only line: attach to current job if it doesn't have a date yet
+      currentJob.duration = (dateStr || "").replace(/[-–—]+/g, " - ").trim();
+    } else if (currentJob) {
+      // Collect bullet points
+      if (isBullet) {
+        const cleaned = cleanBullet(line);
+        if (cleaned.length >= 10 && cleaned.length < 500) {
+          bullets.push(cleaned);
+        }
+      } else if (line.length >= 15 && line.length < 300) {
+        // Non-bullet descriptive line (some resumes don't use bullet markers)
+        const isNotEmail = !line.includes("@");
+        const isNotPhone = !/^\+?\d[\d\s\-()]{8,}$/.test(line);
+        const isNotUrl = !/^https?:\/\//i.test(line);
+        if (isNotEmail && isNotPhone && isNotUrl) {
+          // Check if this might be a company name for the current job
+          if (!currentJob.company && (looksLikeCompany(line) || line.length < 60) && line.length < 80 && !hasDate && bullets.length === 0) {
+            currentJob.company = line.split(/\s*[•|]\s*/)[0].trim();
+          } else if (!currentJob.title && looksLikeJobTitle(line) && line.length < 80 && bullets.length === 0) {
+            currentJob.title = line.split(/\s*[•|]\s*/)[0].trim();
+          } else if (line.length >= 20) {
+            // Treat as a descriptive bullet
+            bullets.push(line.trim());
           }
         }
-      }
-
-      // Clean up extracted values
-      title = title.replace(/[•|,].*$/, "").trim();
-      company = company.replace(/[,]?\s*(pvt|ltd|inc|corp|llc|limited)\.?/gi, "").trim();
-      company = company.replace(/\s*[•|]\s*.*$/, "").trim();
-
-      currentJob = {
-        title: title || line.split(/\s*[-–|•@]\s*/)[0]?.trim() || "",
-        company: company,
-        duration: duration,
-        location: location,
-        bullets: []
-      };
-
-      inExperienceSection = true;
-    } else if (currentJob || inExperienceSection) {
-      // Check if this is a bullet point
-      const isBullet = /^[•●○■▪►▸\-\*]\s*/.test(line) || /^\d+[.)]\s*/.test(line);
-      const isLongEnough = line.length >= 15;
-      const isNotHeader = !expSectionPatterns.some(p => p.test(line)) &&
-                          !endSectionPatterns.some(p => p.test(line));
-      const isNotEmail = !line.includes("@");
-      const isNotPhone = !/^\+?\d[\d\s\-()]{8,}$/.test(line);
-
-      if ((isBullet || (isLongEnough && line.length < 300)) && isNotHeader && isNotEmail && isNotPhone) {
-        const cleanBullet = line.replace(/^[•●○■▪►▸\-\*]\s*/, "").replace(/^\d+[.)]\s*/, "").trim();
-        if (cleanBullet.length >= 15 && cleanBullet.length < 300) {
-          bullets.push(cleanBullet);
-        }
-      }
-
-      // Also check if this could be a company name for current job (on separate line)
-      if (currentJob && !currentJob.company && !isBullet && line.length > 3 && line.length < 100) {
-        const couldBeCompany = /\b(pvt|ltd|inc|corp|llc|company|limited|solutions|technologies|services|consulting)\b/i.test(line) ||
-                               /^[A-Z][a-z]+\s+[A-Z]/.test(line);
-        if (couldBeCompany) {
-          currentJob.company = line.split(/\s*[•|]\s*/)[0].trim();
+      } else if (line.length < 15 && line.length >= 3 && !currentJob.company && bullets.length === 0) {
+        // Very short non-bullet line right after job start - likely company or location
+        if (!line.includes("@") && !/^\+?\d/.test(line)) {
+          currentJob.company = line.trim();
         }
       }
     }
@@ -596,15 +716,15 @@ function parseExperienceDetailed(resumeText) {
   const uniqueExperience = [];
   const seen = new Set();
   for (const exp of experience) {
-    const key = `${exp.title.toLowerCase()}-${exp.company.toLowerCase()}`;
+    const key = `${(exp.title || "").toLowerCase()}-${(exp.company || "").toLowerCase()}`;
     if (!seen.has(key) && (exp.title || exp.company)) {
       seen.add(key);
       uniqueExperience.push(exp);
     }
   }
 
-  console.log(`[CV Generation] Extracted ${uniqueExperience.length} experience entries`);
-  return uniqueExperience.slice(0, 6); // Max 6 positions
+  console.log(`[CV Generation] Extracted ${uniqueExperience.length} experience entries (detailed parser)`);
+  return uniqueExperience.slice(0, 8); // Max 8 positions
 }
 
 /**
@@ -619,27 +739,35 @@ function generateProfessionalSummary(data) {
   const allBullets = parsedExperience?.flatMap(e => e.bullets || []).join(" ") || "";
   const hasMetrics = /\d+%|\$\d|increased|improved|reduced|grew/i.test(allBullets);
 
-  if (!targetRole || !topSkills.length) {
-    if (selfDescription && selfDescription.length > 50) {
-      return selfDescription.slice(0, 350) + (selfDescription.length > 350 ? "..." : "");
+  // Use selfDescription as the base when available - it's the user's own words
+  if (selfDescription && selfDescription.length > 50) {
+    let summary = selfDescription.trim();
+    // Append role/skills context if not already present
+    const mentionsRole = targetRole && summary.toLowerCase().includes(targetRole.toLowerCase());
+    if (!mentionsRole && targetRole) {
+      summary += ` Targeting ${targetRole} roles${years ? ` with ${years}+ years of experience` : ""}.`;
     }
-    return "Dedicated professional with a proven track record of delivering results. Committed to excellence and continuous improvement.";
+    return summary.slice(0, 500);
   }
 
-  const templates = [
-    // Template 1: Classic professional
-    `${levelCapitalized}-level ${targetRole} with ${years ? `${years}+ years of` : "demonstrated"} experience in ${topSkills.slice(0, 2).join(" and ")}. ${hasMetrics ? "Proven track record of delivering measurable results and driving business impact." : "Passionate about delivering high-quality solutions and driving team success."} Seeking opportunities to leverage expertise in ${topSkills[0]} to contribute to innovative projects.`,
+  if (!targetRole || !topSkills.length) {
+    return "Dedicated professional committed to delivering results and continuous improvement.";
+  }
 
-    // Template 2: Achievement-focused
-    `Results-driven ${targetRole} specializing in ${topSkills.join(", ")}. ${years ? `With ${years}+ years in the industry, brings` : "Brings"} deep expertise in building scalable solutions and leading cross-functional initiatives. ${hasMetrics ? "Consistently exceeds targets and delivers value." : "Committed to excellence and continuous learning."}`,
+  // Generate summary from data
+  let summary = `${levelCapitalized}-level ${targetRole}`;
+  if (years) {
+    summary += ` with ${years}+ years of experience`;
+  }
+  summary += ` in ${topSkills.slice(0, 2).join(" and ")}. `;
 
-    // Template 3: Value proposition
-    `Dynamic ${levelCapitalized.toLowerCase()}-level ${targetRole} combining technical proficiency in ${topSkills.slice(0, 2).join(" and ")} with strong problem-solving abilities. ${years ? `${years}+ years of experience` : "Solid experience"} translating complex requirements into effective solutions. Eager to drive innovation and growth.`
-  ];
+  if (hasMetrics) {
+    summary += "Proven track record of delivering measurable results. ";
+  }
 
-  // Choose template based on data richness
-  const templateIndex = (skills.length > 5 && years > 3) ? 1 : (years > 0 ? 0 : 2);
-  return templates[templateIndex];
+  summary += `Skilled in ${topSkills.join(", ")}.`;
+
+  return summary;
 }
 
 /**

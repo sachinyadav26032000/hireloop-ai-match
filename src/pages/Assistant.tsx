@@ -300,7 +300,7 @@ function SectionHeader({ icon: Icon, title, description, required = false }: {
           {required && <span className="text-red-400 text-sm">*</span>}
         </h3>
         {description && (
-          <p className="text-sm text-zinc-500 mt-0.5">{description}</p>
+          <p className="text-sm text-zinc-300 mt-0.5">{description}</p>
         )}
       </div>
     </div>
@@ -857,7 +857,7 @@ function AssistantContent() {
     try {
       const result = await assistantApi.generateCV(
         profileAnalysis,
-        { fullName, email, phone, location },
+        { fullName, email, phone, location, linkedinUrl, selfDescription },
         resumeText
       );
 
@@ -894,8 +894,8 @@ function AssistantContent() {
     try {
       const result = await assistantApi.optimizeLinkedIn(
         profileAnalysis,
-        { fullName, email, location },
-        { about: linkedinUrl, url: linkedinUrl },
+        { fullName, email, phone, location, linkedinUrl, selfDescription, resumeText },
+        { url: linkedinUrl },
         cvData || undefined // Pass CV data for experience, education, etc.
       );
 
@@ -1194,7 +1194,7 @@ function AssistantContent() {
 
   // Dark theme input classes
   const inputClass = "bg-zinc-800/50 border-zinc-700 text-white placeholder:text-zinc-500 focus:border-violet-500 focus:ring-violet-500/20";
-  const labelClass = "text-zinc-300";
+  const labelClass = "text-white";
 
   // Show AI thinking state when loading
   if (loading && aiThinkingMessage) {
@@ -1258,7 +1258,7 @@ function AssistantContent() {
                   </div>
                   Get Started in Seconds
                 </CardTitle>
-                <CardDescription className="text-zinc-400">
+                <CardDescription className="text-white">
                   Upload your resume and we'll do the rest. AI extracts your details automatically.
                 </CardDescription>
               </CardHeader>
@@ -1285,7 +1285,7 @@ function AssistantContent() {
                             </div>
                           </div>
                           <p className="text-lg font-medium text-violet-300">Analyzing your resume...</p>
-                          <p className="text-sm text-zinc-500 mt-1">Extracting skills, experience, and contact info</p>
+                          <p className="text-sm text-zinc-300 mt-1">Extracting skills, experience, and contact info</p>
                         </div>
                       ) : resumeAutoFilled ? (
                         // Success State
@@ -1294,7 +1294,7 @@ function AssistantContent() {
                             <CheckCircle className="h-8 w-8 text-white" />
                           </div>
                           <p className="text-lg font-medium text-emerald-400">Resume analyzed successfully!</p>
-                          <p className="text-sm text-zinc-400 mt-1">
+                          <p className="text-sm text-zinc-200 mt-1">
                             Your details have been auto-filled. You can edit anything below.
                           </p>
                           {autoFilledFields.length > 0 && (
@@ -1325,7 +1325,7 @@ function AssistantContent() {
                             <Upload className="h-10 w-10 text-violet-400" />
                           </div>
                           <p className="text-xl font-semibold text-white mb-2">Upload Your Resume</p>
-                          <p className="text-zinc-400 mb-4">
+                          <p className="text-zinc-200 mb-4">
                             Drop your resume here or click to browse
                           </p>
                           <Button
@@ -1337,7 +1337,7 @@ function AssistantContent() {
                             <Upload className="h-4 w-4 mr-2" />
                             Choose File (PDF, DOCX, TXT)
                           </Button>
-                          <p className="text-xs text-zinc-500 mt-3">
+                          <p className="text-xs text-zinc-300 mt-3">
                             Max 5MB • Your resume will auto-fill all fields below
                           </p>
                         </div>
@@ -1362,7 +1362,7 @@ function AssistantContent() {
                         <div className="w-full border-t border-zinc-800" />
                       </div>
                       <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-zinc-900 px-4 text-zinc-500">or fill manually</span>
+                        <span className="bg-zinc-900 px-4 text-zinc-300">or fill manually</span>
                       </div>
                     </div>
                   )}
@@ -1668,7 +1668,7 @@ function AssistantContent() {
                         Select at least one skill
                       </p>
                     )}
-                    <p className="text-xs text-zinc-500 mt-2">
+                    <p className="text-xs text-zinc-300 mt-2">
                       {resumeAutoFilled
                         ? "These skills were extracted from your resume. Feel free to add or remove any."
                         : "AI will cross-check your resume skills with your selections to flag inconsistencies."}
@@ -1687,7 +1687,7 @@ function AssistantContent() {
                   <div className="pl-11 space-y-4">
                     {/* Resume Text Area */}
                     <div className="space-y-2">
-                      <Label htmlFor="resume" className="text-sm text-zinc-400 flex items-center gap-2">
+                      <Label htmlFor="resume" className="text-sm text-white flex items-center gap-2">
                         Resume Text *
                         {autoFilledFields.includes("Resume Content") && resumeText && (
                           <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
@@ -1722,7 +1722,7 @@ function AssistantContent() {
                       <FieldWarning warning={warnings.resumeText} />
                     </div>
 
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-zinc-300">
                       {resumeAutoFilled
                         ? "This content was extracted from your resume. You can edit it if needed."
                         : "AI extracts skills and generates your CV from this content. The more detailed your resume, the better the analysis."}
@@ -2240,7 +2240,7 @@ function AssistantContent() {
                 userInfo={{
                   fullName,
                   email,
-                  phone: "",
+                  phone,
                   location,
                   linkedinUrl,
                 }}

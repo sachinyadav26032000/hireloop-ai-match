@@ -199,7 +199,7 @@ function buildProfileFromData(
       role,
       skills,
       yearsExp,
-      profileAnalysis?.strengths || []
+      profileAnalysis?.achievements || []
     ),
 
     experience: (cvData?.experience || []).map((exp, i) => ({

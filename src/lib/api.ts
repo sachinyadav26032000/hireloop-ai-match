@@ -23,6 +23,8 @@ export interface ProfileAnalysis {
   weakAreas: string[];
   marketGaps: string[];
   summary: string;
+  achievements?: string[];
+  uniqueStrengths?: string[];
   atsScoreBreakdown?: ATSScoreBreakdown;
 }
 
@@ -229,6 +231,9 @@ export interface AssistantInput {
     phone?: string;
     location?: string;
     linkedin?: string;
+    linkedinUrl?: string;
+    selfDescription?: string;
+    resumeText?: string;
   };
   currentLinkedin?: {
     headline?: string;

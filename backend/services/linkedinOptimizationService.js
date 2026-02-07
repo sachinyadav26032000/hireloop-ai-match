@@ -246,70 +246,106 @@ function generateAboutSection(data) {
   const { role, skills, softSkills, years, level, industries, achievements, selfDescription } = data;
   const industry = industries?.[0] || "Technology";
 
-  // Choose template based on experience
-  const template = years >= 3 ? ABOUT_TEMPLATES.experienced : ABOUT_TEMPLATES.emerging;
+  // If user provided a self-description, build around their own words
+  if (selfDescription && selfDescription.length > 30) {
+    let about = selfDescription.trim();
 
-  // Generate hook based on role
-  const hooks = {
-    senior: `Transforming ideas into impactful ${role} solutions`,
-    mid: `Building innovative solutions as a ${role}`,
-    junior: `Passionate ${role} ready to make an impact`,
-    entry: `Enthusiastic about starting my journey as a ${role}`
-  };
+    // Append skills section if not already mentioned
+    const skillsAlreadyMentioned = skills.slice(0, 3).some(s =>
+      about.toLowerCase().includes(s.toLowerCase())
+    );
+    if (!skillsAlreadyMentioned && skills.length > 0) {
+      about += `\n\nCore Expertise:\n${skills.slice(0, 6).map(s => `• ${s}`).join("\n")}`;
+    }
 
-  // Skill details
-  const skillDetails = {
-    "JavaScript": "Building interactive, performant web applications",
-    "Python": "Data processing, automation, and backend development",
-    "React": "Creating responsive, user-friendly interfaces",
-    "Node.js": "Scalable server-side applications and APIs",
-    "AWS": "Cloud architecture and deployment",
-    "SQL": "Database design and optimization",
-    "Leadership": "Guiding teams to achieve goals",
-    "Communication": "Bridging technical and business stakeholders"
-  };
+    // Append achievements if available
+    if (achievements?.length > 0) {
+      about += `\n\nKey Achievements:\n${achievements.slice(0, 3).map(a => `• ${a}`).join("\n")}`;
+    }
 
-  // Format achievements or generate placeholders
+    about += `\n\nOpen to discussing new opportunities in ${role || industry}.`;
+    return about;
+  }
+
+  // Generate dynamic skill descriptions from skill name
+  function getSkillDetail(skill) {
+    const staticDetails = {
+      "JavaScript": "Building interactive, performant web applications",
+      "TypeScript": "Type-safe development for scalable codebases",
+      "Python": "Data processing, automation, and backend development",
+      "Java": "Enterprise-grade application development",
+      "React": "Creating responsive, component-driven interfaces",
+      "Angular": "Building structured, enterprise front-end applications",
+      "Vue.js": "Developing progressive, reactive web interfaces",
+      "Node.js": "Scalable server-side applications and APIs",
+      "Express": "RESTful API design and middleware architecture",
+      "AWS": "Cloud architecture, deployment, and infrastructure",
+      "Azure": "Cloud services and enterprise integration",
+      "GCP": "Google Cloud platform solutions and deployment",
+      "Docker": "Containerized application deployment and orchestration",
+      "Kubernetes": "Container orchestration and microservices management",
+      "SQL": "Database design, querying, and optimization",
+      "MongoDB": "NoSQL database design and data modeling",
+      "PostgreSQL": "Advanced relational database management",
+      "Redis": "High-performance caching and data structures",
+      "GraphQL": "Efficient API design with flexible data fetching",
+      "REST": "Designing clean, scalable RESTful services",
+      "Git": "Version control and collaborative development workflows",
+      "CI/CD": "Automated testing, building, and deployment pipelines",
+      "Machine Learning": "Building predictive models and data-driven solutions",
+      "TensorFlow": "Deep learning model development and training",
+      "Figma": "UI/UX design and collaborative prototyping",
+      "Agile": "Iterative development and cross-functional collaboration",
+      "Scrum": "Sprint planning, retrospectives, and delivery management",
+      "Leadership": "Guiding teams toward shared objectives",
+      "Communication": "Bridging technical and business stakeholders",
+      "Problem Solving": "Analyzing challenges and delivering effective solutions",
+      "Project Management": "Planning, executing, and delivering on schedule",
+    };
+    return staticDetails[skill] || `Hands-on experience in ${skill}`;
+  }
+
+  // Format achievements - only use real data, no generic filler
   let achievementText = "";
   if (achievements?.length > 0) {
-    achievementText = achievements.slice(0, 2).map(a => `• ${a}`).join("\n");
-  } else if (years > 3) {
-    achievementText = `• ${years}+ years of experience delivering ${industry} solutions\n• Proven track record of meeting deadlines and exceeding expectations`;
-  } else {
-    achievementText = `• Strong foundation in ${skills[0] || "core technologies"}\n• Quick learner with a passion for quality`;
+    achievementText = achievements.slice(0, 3).map(a => `• ${a}`).join("\n");
   }
 
-  // Build skills list
-  const skillsList = skills.slice(0, 5).map(s => `• ${s}`).join("\n");
+  // Build about section with real data
+  const topSkills = skills.slice(0, 3);
+  const levelLabel = level === "senior" ? "Senior" : level === "junior" ? "Junior" : "";
+  const roleLabel = `${levelLabel ? levelLabel + " " : ""}${role}`;
 
-  let about = template
-    .replace("{hook}", hooks[level] || hooks.mid)
-    .replace("{years}", years || "several")
-    .replace("{industry}", industry)
-    .replace("{role}", role)
-    .replace("{level}", level)
-    .replace("{skill1}", skills[0] || "core technologies")
-    .replace("{skill2}", skills[1] || "best practices")
-    .replace("{skill3}", skills[2] || "modern methodologies")
-    .replace("{skill1_detail}", skillDetails[skills[0]] || "Delivering excellence")
-    .replace("{skill2_detail}", skillDetails[skills[1]] || "Building quality solutions")
-    .replace("{skill3_detail}", skillDetails[skills[2]] || "Driving results")
-    .replace("{softSkill1}", softSkills[0] || "Team Collaboration")
-    .replace("{softSkill2}", softSkills[1] || "Problem Solving")
-    .replace("{achievements}", achievementText)
-    .replace("{skillsList}", skillsList);
+  let about = "";
 
-  // VALIDATION: Remove any remaining unreplaced placeholders
-  about = about.replace(/\{[^}]+\}/g, "relevant expertise");
+  if (years >= 3) {
+    about += `${roleLabel} with ${years}+ years of experience in ${industry}. `;
+    about += `Specializing in ${topSkills.slice(0, 2).join(" and ") || "delivering technical solutions"}.`;
+  } else if (years > 0) {
+    about += `${roleLabel} with ${years}+ years of hands-on experience. `;
+    about += `Focused on ${topSkills[0] || industry} and building quality solutions.`;
+  } else {
+    about += `${roleLabel} focused on ${topSkills[0] || industry}. `;
+    about += `Committed to continuous learning and delivering results.`;
+  }
 
-  // VALIDATION: Ensure no placeholder text remains
-  const placeholderPatterns = ["lorem ipsum", "placeholder", "[your", "example text"];
-  for (const pattern of placeholderPatterns) {
-    if (about.toLowerCase().includes(pattern)) {
-      console.warn(`[LinkedIn Optimization] Warning: Found placeholder "${pattern}" in About section`);
-      about = about.replace(new RegExp(pattern, "gi"), role || "Professional");
+  // Skills section
+  if (skills.length > 0) {
+    about += `\n\nWhat I Bring:\n`;
+    skills.slice(0, 4).forEach(skill => {
+      about += `• ${skill} - ${getSkillDetail(skill)}\n`;
+    });
+    if (softSkills?.length > 0) {
+      about += `• ${softSkills.slice(0, 2).join(" & ")}`;
     }
   }
+
+  // Achievements section - only if real data exists
+  if (achievementText) {
+    about += `\n\nKey Highlights:\n${achievementText}`;
+  }
+
+  about += `\n\nOpen to discussing ${industry} opportunities, collaborations, or new challenges.`;
 
   return about;
 }
@@ -391,7 +427,8 @@ function calculateLinkedInScore(data) {
  * Generate comprehensive optimization without AI (intelligent fallback)
  */
 function generateBasicOptimization(input) {
-  const { profileAnalysis, userInfo, resumeText } = input;
+  const { profileAnalysis, userInfo } = input;
+  const resumeText = input.resumeText || userInfo?.resumeText || input.existingResume || "";
   const targetRole = profileAnalysis?.suggestedRoles?.[0] || "Professional";
   const skills = profileAnalysis?.coreSkills || [];
   const softSkills = profileAnalysis?.softSkills || [];
@@ -657,14 +694,15 @@ function getCertificationsForRole(role) {
  * Uses ONLY actual candidate data - no placeholders or fake content
  */
 function generateLinkedInProfilePreview(input) {
-  const { profileAnalysis, userInfo, cvData, resumeText } = input;
+  const { profileAnalysis, userInfo, cvData } = input;
+  const resumeText = input.resumeText || userInfo?.resumeText || input.existingResume || "";
 
   // Extract real data
   const name = userInfo?.fullName || cvData?.fullName || "Your Name";
   const email = userInfo?.email || cvData?.email || "";
   const phone = userInfo?.phone || cvData?.phone || "";
   const location = userInfo?.location || cvData?.location || profileAnalysis?.preferredLocations?.[0] || "";
-  const linkedinUrl = userInfo?.linkedin || cvData?.linkedin || "";
+  const linkedinUrl = userInfo?.linkedinUrl || userInfo?.linkedin || cvData?.linkedin || "";
 
   // Role and experience
   const targetRole = profileAnalysis?.suggestedRoles?.[0] || cvData?.title || "";
