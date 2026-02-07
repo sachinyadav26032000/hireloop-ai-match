@@ -876,9 +876,13 @@ function extractResumeData(text) {
         if (emailFromWordToken && emailFromReconstruct) {
           const localA = emailFromWordToken.split('@')[0];
           const localB = emailFromReconstruct.split('@')[0];
-          // Guard: if A's local part is already a suffix of B, A.5 just prepended name/garbage
-          // e.g., "nikhilcm" (A) vs "nikhilcmnikhilcm" (A.5) - A.5 grabbed "Nikhil CM" from name text
-          const isDuplicated = localB.length > localA.length && localB.endsWith(localA) && localA.length >= 5;
+          // Guard: if A's local part is a suffix of B and the prefix is substantial (3+ chars),
+          // A.5 likely prepended name/garbage. But if prefix is short (1-2 chars like "a"),
+          // it's probably a legitimate fix for a split character.
+          // e.g., "nikhilcm" (A) vs "nikhilcmnikhilcm" (A.5) - prefix "nikhilcm" (8 chars) = duplication
+          // e.g., "nkitdutt87" (A) vs "ankitdutt87" (A.5) - prefix "a" (1 char) = legitimate fix
+          const prefixLen = localB.length - localA.length;
+          const isDuplicated = localB.endsWith(localA) && localA.length >= 5 && prefixLen >= 3;
           if (!isDuplicated && localB.length > localA.length && localB.length <= 30) {
             data.email = emailFromReconstruct;
             console.log(`[ResumeParser] Email extracted (reconstruct preferred over token): "${emailFromReconstruct}"`);
