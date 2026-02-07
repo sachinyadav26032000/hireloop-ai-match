@@ -24,7 +24,7 @@ import { createWorker } from "tesseract.js";
 // OCR worker instance (lazy init)
 let ocrWorker = null;
 
-console.log("[ResumeParser] Module loaded - VERSION 4.3 with PDF text cleaning");
+console.log("[ResumeParser] Module loaded - VERSION 5.0 with comprehensive text cleaning & smart skill extraction");
 
 // Common resume section headers to exclude from name detection (all lowercase)
 const SECTION_HEADERS = [
@@ -94,11 +94,11 @@ const RELATED_SKILLS_MAP = {
   "Guidewire": ["PolicyCenter", "ClaimCenter", "Insurance", "Java"],
   "PolicyCenter": ["Guidewire", "Insurance", "Java", "Gosu"],
   "Sales": ["Negotiation", "CRM", "Business Development", "Account Management"],
-  "Marketing": ["Digital Marketing", "SEO", "Content", "Analytics"],
+  "Marketing": ["Digital Marketing", "SEO", "Content Marketing", "Analytics"],
   "Leadership": ["Team Management", "Mentoring", "Strategic Planning"],
-  "Recruitment": ["Talent Acquisition", "Sourcing", "ATS", "Interviewing"],
+  "Recruitment": ["Talent Acquisition", "Sourcing", "ATS"],
   "Legal": ["Compliance", "Contract Management", "Corporate Law"],
-  "Finance": ["Financial Analysis", "Excel", "Budgeting", "Forecasting"],
+  "Finance": ["Financial Analysis", "Budgeting", "Forecasting"],
   // E-Commerce & Growth
   "E-Commerce": ["Category Management", "Digital Marketing", "Analytics", "Omnichannel", "D2C"],
   "Ecommerce": ["Category Management", "Digital Marketing", "Analytics", "Omnichannel", "D2C"],
@@ -113,45 +113,90 @@ const RELATED_SKILLS_MAP = {
 /**
  * Clean PDF text artifacts for better readability
  * Fixes common PDF extraction issues like spacing, bullets, and fragmented text
+ * VERSION 5.0 - Comprehensive cleaning for production use
  */
 function cleanPDFText(text) {
   if (!text) return text;
 
   let cleaned = text;
 
-  // Step 1: Fix spaces around hyphens (E - COMMERCE -> E-COMMERCE)
+  // Step 0: Remove control characters and non-printable chars (except newline, tab)
+  cleaned = cleaned.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  // Remove zero-width characters, soft hyphens, BOM
+  cleaned = cleaned.replace(/[\u200B\u200C\u200D\uFEFF\u00AD\u200E\u200F\u202A-\u202E]/g, '');
+
+  // Step 0.5: Normalize smart quotes and special dashes early
+  cleaned = cleaned.replace(/[\u2018\u2019\u201B\u0060]/g, "'");  // Smart single quotes -> '
+  cleaned = cleaned.replace(/[\u201C\u201D\u201E\u201F]/g, '"');  // Smart double quotes -> "
+  cleaned = cleaned.replace(/[\u2011]/g, '-');  // Non-breaking hyphen -> regular hyphen
+  cleaned = cleaned.replace(/[\u2013\u2014\u2015\u2012]/g, '-');  // En/em dashes -> hyphen
+
+  // Step 0.6: Remove emoji characters (surrogate pairs and common emoji ranges)
+  cleaned = cleaned.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, ''); // Surrogate pairs (emoji)
+  cleaned = cleaned.replace(/[\u2600-\u27BF\u2B50-\u2B55\u231A-\u231B\u23E9-\u23F3\u23F8-\u23FA]/g, ''); // Misc symbols
+  cleaned = cleaned.replace(/[\u{1F000}-\u{1FFFF}]/gu, ''); // Extended emoji (with unicode flag)
+
+  // Step 1: Replace ALL weird bullet/symbol characters with standard bullet
+  // Includes Unicode bullets, Microsoft Symbol/Wingdings private-use area chars (U+F000-U+F0FF)
+  cleaned = cleaned.replace(/[▪▸▹►▻●○◦◆◇■□★☆→⇒⇨⮕➜➤➢➣➔➡•‣⁃◘◙◉◎▶▷▸▹▲△▴▵▻▹✦✧✩✪✫✬✭✮✯✰✱✲✳✴✵✶✷✸✹✺✻✼✽✾✿❀❁❂❃❄❅❆❇❈❉❊❋➲⊕⊗⊙⊚⊛⊜⊝♦♣♠♥⬥⬦⬧⬨⬩⬪⬫◈⧫▰▱❖⁂⁎⁕❍❑❒⊡⊞⊟⬡⬢⬣▮▯⏩⏵⏶⏷]/g, '•');
+  // Microsoft Symbol font chars (Private Use Area) - commonly appear as bullets in PDF
+  cleaned = cleaned.replace(/[\uF020-\uF0FF]/g, '•');
+  // Also handle common PDF extraction artifacts for bullets
+  cleaned = cleaned.replace(/^\s*[·∙⋅‧∘⦁⦿⧂]\s*/gm, '• ');
+  // Fix "o " used as bullet at line start
+  cleaned = cleaned.replace(/^\s*o\s{2,}/gm, '• ');
+  // Clean up multiple consecutive bullets (from symbol font cleanup)
+  cleaned = cleaned.replace(/•{2,}/g, '•');
+
+  // Step 2: Fix spaces around hyphens (E - COMMERCE -> E-COMMERCE)
   cleaned = cleaned.replace(/(\w)\s+-\s+(\w)/g, '$1-$2');
   cleaned = cleaned.replace(/(\w)\s+–\s+(\w)/g, '$1-$2'); // en-dash
+  cleaned = cleaned.replace(/(\w)\s+—\s+(\w)/g, '$1-$2'); // em-dash
 
-  // Step 2: Fix spaced single letters forming words
-  // Pattern: uppercase letter + space + uppercase letter(s) (handles G ROWTH, O MNICHANNEL, etc.)
+  // Step 3: Fix spaced single letters forming words (iterative - handles deeply broken text)
   for (let i = 0; i < 10; i++) {
     const prev = cleaned;
-    // Fix "G ROWTH" -> "GROWTH" (single letter + space + rest of word starting with uppercase)
+    // Fix "G ROWTH" -> "GROWTH" (single uppercase + space + rest starting with uppercase)
     cleaned = cleaned.replace(/\b([A-Z])\s+([A-Z]+[a-z]*)\b/g, '$1$2');
     // Fix "C OR E" -> "CORE" (spaced all-caps fragments)
     cleaned = cleaned.replace(/\b([A-Z]{1,3})\s+([A-Z]{1,3})\s+([A-Z]{1,3})\b/g, '$1$2$3');
-    // Fix patterns like "SKI LLS" -> "SKILLS"
+    // Fix "SKI LLS" -> "SKILLS"
     cleaned = cleaned.replace(/\b([A-Z]{2,4})\s+([A-Z]{2,4})\b/g, '$1$2');
     if (prev === cleaned) break;
   }
 
-  // Step 3: Fix fragmented words with spaces (common PDF issue)
-  // "Presen t" -> "Present", "neutra l" -> "neutral"
+  // Step 4: Fix fragmented words with trailing single letter
+  // "Presen t" -> "Present", "neutra l" -> "neutral", "developmen t" -> "development"
   cleaned = cleaned.replace(/(\w{3,})\s([a-z])\b/g, '$1$2');
+  // "Presen tation" -> "Presentation"
+  cleaned = cleaned.replace(/(\w{3,})\s([a-z]{2,4})\b/g, (match, p1, p2) => {
+    // Only fix if the combined word looks valid (no double consonant clusters etc.)
+    const combined = p1 + p2;
+    // Check if p1 ends with a letter that can connect to p2's start
+    if (/[a-zA-Z]$/.test(p1) && /^[a-z]/.test(p2) && combined.length <= 20) {
+      return combined;
+    }
+    return match;
+  });
   // "E stablish ed" -> "Established"
   cleaned = cleaned.replace(/\b([A-Z])\s([a-z]{2,})\s([a-z]{2,})\b/g, '$1$2$3');
+  // "wo rk" -> "work", "ma nage" -> "manage" (short prefix + rest)
+  cleaned = cleaned.replace(/\b([a-z]{2})\s([a-z]{2,})\b/g, (match, p1, p2) => {
+    // Only merge if it creates a valid-looking word
+    const combined = p1 + p2;
+    if (combined.length >= 4 && combined.length <= 15) {
+      return combined;
+    }
+    return match;
+  });
 
-  // Step 4: Replace weird bullet characters with standard ones
-  cleaned = cleaned.replace(/[▪▸▹►▻●○◦◆◇■□★☆→⇒•‣⁃]/g, '•');
-
-  // Step 5: Fix multiple spaces
+  // Step 5: Fix multiple spaces (but preserve newlines)
   cleaned = cleaned.replace(/[ \t]+/g, ' ');
 
   // Step 6: Fix space before punctuation
   cleaned = cleaned.replace(/\s+([.,;:!?])/g, '$1');
 
-  // Step 7: Clean up line breaks (multiple -> double)
+  // Step 7: Clean up line breaks (3+ newlines -> double)
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
 
   // Step 8: Fix common PDF artifacts
@@ -159,9 +204,59 @@ function cleanPDFText(text) {
   cleaned = cleaned.replace(/\(\s+/g, '('); // Fix space after opening paren
   cleaned = cleaned.replace(/\s+\)/g, ')'); // Fix space before closing paren
 
-  // Step 9: Fix numbers with spaces (4 K Cr -> 4K Cr)
+  // Step 9: Fix numbers with spaces (4 K Cr -> 4K Cr, 20 % -> 20%)
   cleaned = cleaned.replace(/(\d)\s+([KMB])\s/g, '$1$2 ');
   cleaned = cleaned.replace(/(\d)\s+%/g, '$1%');
+  cleaned = cleaned.replace(/(\d)\s+(Cr|Lakh|cr|lakh|crore|lakhs)/g, '$1 $2');
+
+  // Step 10: Fix words stuck together from PDF extraction (missing spaces)
+  // 10a: CamelCase-like patterns: lowercase meets uppercase
+  cleaned = cleaned.replace(/([a-z]{2,})([A-Z][a-z]{2,})/g, '$1 $2');
+
+  // 10b: Common words stuck to previous word (3+ char words only to avoid breaking "India", "Java" etc.)
+  // Only fix when left part is 3+ letters and the common word is clearly a separate word
+  const stuckWords3 = ['and', 'the', 'for', 'but', 'not', 'nor', 'yet', 'from', 'into', 'over', 'also', 'this', 'that', 'than', 'then', 'with', 'using', 'their', 'about', 'after', 'being', 'every', 'other', 'since', 'still', 'these', 'those', 'under', 'would', 'which', 'where', 'while', 'through', 'across', 'during', 'time', 'cost', 'code', 'thus', 'like', 'such', 'when', 'each', 'both', 'more', 'most', 'some', 'many', 'were', 'will', 'been', 'have', 'has', 'had', 'was', 'are', 'can', 'did', 'per', 'via', 'our', 'who'];
+  for (const word of stuckWords3) {
+    // Pattern: 3+ lowercase letters + stuck common word + space/punctuation/uppercase
+    const regex = new RegExp(`([a-z]{3,})(${word})(?=[\\s,.;:!?A-Z(]|$)`, 'g');
+    cleaned = cleaned.replace(regex, '$1 $2');
+  }
+
+  // 10c: Short common words (2 chars) stuck to previous word - more conservative
+  // Only fix when left part is 5+ letters to minimize false positives
+  const stuckWords2 = ['of', 'in', 'on', 'to', 'at', 'by', 'as', 'is', 'or', 'an', 'if', 'so', 'do', 'no', 'up', 'us', 'we', 'be'];
+  for (const word of stuckWords2) {
+    // Pattern: 5+ lowercase letters + stuck short word + space/punctuation/uppercase
+    const regex = new RegExp(`([a-z]{5,})(${word})(?=[\\s,.;:!?A-Z(]|$)`, 'g');
+    cleaned = cleaned.replace(regex, '$1 $2');
+  }
+
+  // Step 11: Join broken sentences across lines
+  // If a line ends without sentence-ending punctuation and next line starts lowercase, join them
+  cleaned = cleaned.replace(/([a-z,])\n([a-z])/g, '$1 $2');
+  // If a line ends with a hyphen (word break), join the word
+  cleaned = cleaned.replace(/(\w)-\n(\w)/g, '$1$2');
+
+  // Step 11: Remove orphan single characters on their own lines (PDF artifacts)
+  cleaned = cleaned.replace(/\n\s*[•\-]\s*\n/g, '\n');
+
+  // Step 12: Clean up bullet formatting for consistency
+  // Ensure bullets have a space after them
+  cleaned = cleaned.replace(/•\s*/g, '• ');
+  // Remove empty bullets (bullet with no content)
+  cleaned = cleaned.replace(/•\s*\n/g, '\n');
+  // Remove bullets that only have 1-2 characters of content (PDF noise)
+  cleaned = cleaned.replace(/•\s*.{1,2}\s*\n/g, '\n');
+
+  // Step 13: Remove lines that are just noise (common PDF artifacts)
+  // Lines that are just special characters, pipes, dashes
+  cleaned = cleaned.replace(/^\s*[-|_=~]{3,}\s*$/gm, '');
+  // Lines that are just a single character
+  cleaned = cleaned.replace(/^\s*[a-zA-Z]\s*$/gm, '');
+
+  // Step 14: Final cleanup
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n'); // Re-clean excess newlines from removals
+  cleaned = cleaned.replace(/[ \t]+/g, ' '); // Re-clean spaces
 
   return cleaned.trim();
 }
@@ -544,7 +639,8 @@ async function parsePDF(buffer) {
         lines.push(currentLine);
       }
 
-      // Convert lines to text
+      // Convert lines to text - join items with space separator
+      // Post-processing in cleanPDFText handles stuck/split words
       for (const line of lines) {
         const lineText = line.map(item => item.str).join(" ").trim();
         if (lineText.length > 0) {
@@ -608,15 +704,55 @@ async function parseDOCX(buffer) {
 }
 
 /**
- * Clean up extracted text
+ * Clean up extracted text - comprehensive normalization
+ * VERSION 5.0 - Handles PDF artifacts, broken text, noise characters
  */
 function cleanResumeText(text) {
-  return text
-    .replace(/\r\n/g, "\n") // Normalize line endings
-    .replace(/\n{3,}/g, "\n\n") // Remove excessive newlines
-    .replace(/\t+/g, " ") // Replace tabs with spaces
-    .replace(/ {2,}/g, " ") // Remove multiple spaces
-    .trim();
+  if (!text) return "";
+
+  let cleaned = text;
+
+  // Normalize line endings
+  cleaned = cleaned.replace(/\r\n/g, "\n");
+  cleaned = cleaned.replace(/\r/g, "\n");
+
+  // Remove null bytes and control characters
+  cleaned = cleaned.replace(/\0/g, '');
+  cleaned = cleaned.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+
+  // Replace tabs with spaces
+  cleaned = cleaned.replace(/\t+/g, " ");
+
+  // Fix common PDF ligature artifacts
+  cleaned = cleaned.replace(/ﬁ/g, 'fi');
+  cleaned = cleaned.replace(/ﬂ/g, 'fl');
+  cleaned = cleaned.replace(/ﬀ/g, 'ff');
+  cleaned = cleaned.replace(/ﬃ/g, 'ffi');
+  cleaned = cleaned.replace(/ﬄ/g, 'ffl');
+
+  // Normalize quotes and apostrophes
+  cleaned = cleaned.replace(/[''‛`]/g, "'");
+  cleaned = cleaned.replace(/[""„‟]/g, '"');
+
+  // Normalize dashes
+  cleaned = cleaned.replace(/[–—―‒]/g, '-');
+
+  // Normalize ellipsis
+  cleaned = cleaned.replace(/…/g, '...');
+
+  // Remove multiple spaces
+  cleaned = cleaned.replace(/ {2,}/g, " ");
+
+  // Remove excessive newlines (3+ -> 2)
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
+
+  // Remove trailing spaces on each line
+  cleaned = cleaned.replace(/ +\n/g, "\n");
+
+  // Remove leading spaces on each line (except intentional indentation)
+  cleaned = cleaned.replace(/\n {3,}/g, "\n  ");
+
+  return cleaned.trim();
 }
 
 /**
@@ -641,13 +777,39 @@ function extractResumeData(text) {
     if (line.includes('@')) {
       const trimmedLine = line.trim();
 
-      // For shorter lines (likely dedicated email line), clean entire line
+      // For shorter lines (likely dedicated email line), try multiple strategies
       if (trimmedLine.length < 80) {
+        // Strategy A: Extract email directly from line (preserving word boundaries)
+        // This handles "Bengaluru, Karnataka 9113835789 sachinyadav18virat@gmail.com"
+        // by finding the email token among space-separated words
+        const words = trimmedLine.split(/\s+/);
+        for (const word of words) {
+          const cleanWord = word.replace(/[<>()[\]{},;]/g, '').toLowerCase();
+          if (cleanWord.includes('@')) {
+            const emailMatch = cleanWord.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+            if (emailMatch) {
+              data.email = emailMatch[0];
+              console.log(`[ResumeParser] Email extracted (word token): "${word}" -> "${emailMatch[0]}"`);
+              break;
+            }
+          }
+        }
+        if (data.email) break;
+
+        // Strategy B: Handle spaced emails like "sachin @ gmail.com" - remove spaces around @
+        const spacedEmailMatch = trimmedLine.match(/[a-zA-Z0-9._%+-]+\s*@\s*[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+        if (spacedEmailMatch) {
+          data.email = spacedEmailMatch[0].replace(/\s+/g, '').toLowerCase();
+          console.log(`[ResumeParser] Email extracted (spaced): "${spacedEmailMatch[0]}" -> "${data.email}"`);
+          break;
+        }
+
+        // Strategy C: Full line clean (for heavily fragmented emails like "s a c h i n @ g m a i l . c o m")
         const cleaned = trimmedLine.replace(/\s+/g, '').toLowerCase();
-        const emailMatch = cleaned.match(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/);
-        if (emailMatch) {
-          data.email = emailMatch[0];
-          console.log(`[ResumeParser] Email extracted (cleaned line): "${trimmedLine}" -> "${emailMatch[0]}"`);
+        const fullLineMatch = cleaned.match(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/);
+        if (fullLineMatch) {
+          data.email = fullLineMatch[0];
+          console.log(`[ResumeParser] Email extracted (full line clean): "${trimmedLine}" -> "${fullLineMatch[0]}"`);
           break;
         }
       }
@@ -661,7 +823,12 @@ function extractResumeData(text) {
         // Look forwards up to 25 chars for domain
         let end = Math.min(trimmedLine.length, atIndex + 25);
         const emailPortion = trimmedLine.substring(start, end);
-        const cleaned = emailPortion.replace(/\s+/g, '').toLowerCase();
+        // Remove spaces but also strip leading digits/phone numbers that got mixed in
+        let cleaned = emailPortion.replace(/\s+/g, '').toLowerCase();
+        // Remove leading non-email chars (phone numbers, city names stuck to email)
+        // Valid email local part starts with a letter or digit, but shouldn't have 5+ consecutive digits at start
+        cleaned = cleaned.replace(/^[^a-zA-Z]*\d{5,}/, ''); // Strip leading phone numbers
+        cleaned = cleaned.replace(/^[^a-zA-Z@]+/, ''); // Strip leading non-letter chars
 
         // Try to extract with known TLDs first (most reliable)
         // These patterns match email ending at known TLD
@@ -1003,11 +1170,15 @@ function extractResumeData(text) {
     }
   }
 
-  // Extract skills using common skill keywords (avoiding ambiguous short names like Go, R, C)
+  // Extract skills using common skill keywords
+  // IMPORTANT: Excludes ambiguous short names like Go, R, C that cause false positives
+  // Skills are categorized by matching strategy needed
   const skillKeywords = [
-    // Programming Languages
+    // Programming Languages (removed ambiguous: Go, R, C — these cause too many false positives)
     "JavaScript", "TypeScript", "Python", "Java", "C++", "C#", "Golang", "Rust", "Ruby", "PHP", "Swift", "Kotlin",
-    "Scala", "Perl", "Shell", "Bash", "PowerShell", "Groovy", "XML", "JSON", "YAML",
+    "Scala", "Perl", "Shell", "Bash", "PowerShell", "Groovy",
+    // Data formats
+    "XML", "JSON", "YAML",
     // Frontend
     "React", "Angular", "Vue", "Next.js", "HTML", "CSS", "SASS", "SCSS", "Tailwind", "Bootstrap",
     "Redux", "Material UI", "jQuery", "Webpack", "Vite",
@@ -1028,12 +1199,12 @@ function extractResumeData(text) {
     // Messaging & Integration
     "Kafka", "RabbitMQ", "ActiveMQ", "JMS", "Tibco", "MQ", "SQS", "SNS", "Event-Driven",
     // Build Tools
-    "Maven", "Gradle", "npm", "Yarn", "Webpack", "Babel",
+    "Maven", "Gradle", "npm", "Yarn", "Babel",
     // Testing
     "JUnit", "Mockito", "Jest", "Mocha", "Cypress", "Selenium", "TestNG", "Postman",
     "Unit Testing", "Integration Testing", "TDD", "BDD",
-    // Security
-    "OAuth", "OAuth 2.0", "JWT", "SSL", "TLS", "HTTPS", "Security", "Authentication",
+    // Security (removed bare "Security" - too generic)
+    "OAuth", "OAuth 2.0", "JWT", "SSL", "TLS", "HTTPS", "Authentication",
     // Data & ML
     "Machine Learning", "Deep Learning", "TensorFlow", "PyTorch", "Pandas", "NumPy",
     "Data Analysis", "Data Science", "NLP", "Computer Vision", "Scikit-learn",
@@ -1042,17 +1213,19 @@ function extractResumeData(text) {
     "Excel", "Tableau", "Power BI", "VS Code", "IntelliJ", "Eclipse",
     // Methodologies
     "Agile", "Scrum", "SAFe", "Kanban", "Waterfall", "DevOps", "CI/CD Pipeline",
-    // Soft Skills
-    "Leadership", "Communication", "Team Management", "Project Management", "Problem Solving",
-    "Critical Thinking", "Collaboration", "Mentoring",
+    // Leadership & Management Skills
+    "Leadership", "Communication", "Collaboration", "Mentoring",
+    "Team Management", "Project Management", "Problem Solving",
+    "Critical Thinking", "Cross-functional Collaboration",
     // Business & Management Skills
-    "Sales", "Marketing", "Business Development", "Strategic Planning", "P&L Management",
-    "Revenue Growth", "Operations", "Channel Sales", "Distribution", "Account Management",
-    "Customer Success", "Negotiation", "Stakeholder Management", "Budget Management",
-    "Team Building", "Training", "Public Speaking", "Presentation Skills",
-    "CRM", "Salesforce", "HubSpot", "Analytics", "Market Research", "Competitive Analysis",
+    "Sales", "Marketing", "Operations", "Negotiation", "Training", "Analytics",
+    "Business Development", "Strategic Planning", "P&L Management",
+    "Revenue Growth", "Channel Sales", "Account Management", "Distribution",
+    "Customer Success", "Stakeholder Management", "Budget Management",
+    "Team Building", "Public Speaking", "Presentation Skills",
+    "CRM", "Salesforce", "HubSpot", "Market Research", "Competitive Analysis",
     "Product Launch", "Go-to-Market", "Partnership Development", "Vendor Management",
-    "Cross-functional Collaboration", "Change Management", "Process Improvement",
+    "Change Management", "Process Improvement",
     "KPI Management", "Performance Management", "Talent Acquisition", "Employee Engagement",
     // E-Commerce & Digital Business
     "E-Commerce", "Ecommerce", "D2C", "Direct to Consumer", "Omnichannel", "Category Management",
@@ -1064,7 +1237,7 @@ function extractResumeData(text) {
     "Affiliate Marketing", "Influencer Marketing", "Content Marketing",
     "Growth Strategy", "Growth Marketing", "User Acquisition", "Conversion Optimization",
     "A/B Testing", "Funnel Optimization", "Customer Journey", "UX Optimization",
-    // Finance & Insurance
+    // Finance & Insurance (context-sensitive single words are in contextSensitiveSkills)
     "Financial Analysis", "Risk Management", "Investment", "Banking", "Insurance",
     "Wealth Management", "Portfolio Management", "Mutual Funds", "Asset Management",
     // Legal & Compliance
@@ -1079,41 +1252,99 @@ function extractResumeData(text) {
     "Onboarding", "Employee Engagement", "HR Operations", "Talent Management",
     "Compensation", "Benefits", "Workforce Planning", "HR Analytics", "People Operations",
     // Domain Specific
-    "Guidewire", "PolicyCenter", "ClaimCenter", "BillingCenter", "SAP", "Salesforce",
+    "Guidewire", "PolicyCenter", "ClaimCenter", "BillingCenter", "SAP",
     "ServiceNow", "Workday", "Oracle EBS",
   ];
 
+  // Skills that should ONLY match when they appear in a skills/technical section or as standalone terms
+  // These are common English words that happen to also be skill names
+  // They need special context-aware matching to avoid false positives
+  const contextSensitiveSkills = [
+    "Leadership", "Communication", "Sales", "Marketing", "Operations",
+    "Negotiation", "Training", "Collaboration", "Analytics",
+    "Distribution", "Legal", "Compliance", "Insurance", "Investment", "Banking",
+    "Retention", "Sourcing", "Onboarding", "Compensation", "Benefits",
+    "Secretarial", "Litigation", "Marketplace", "Amazon", "Flipkart",
+    "Excel", "Shell", "Express", "Swift",
+  ];
+
+  // Skills that MUST match case-sensitively (uppercase only) to avoid matching regular English words
+  // e.g., "REST" should not match "rest", "SQL" should not match inside "result"
+  // These skills MUST appear as uppercase to be detected (prevents matching regular English words)
+  // "REST" won't match "rest of the team", "SQL" won't match "result", "MQ" won't match random text
+  const caseSensitiveSkills = ["REST", "SQL", "MQ"];
+
   // Normalize text for heavily spaced PDFs (like "J a v a" -> "Java")
-  // Detect if text has excessive spacing by checking for patterns like single letters separated by spaces
   let normalizedText = text;
   const singleCharPattern = /\b[A-Za-z]\s+[A-Za-z]\s+[A-Za-z]\b/g;
   const singleCharMatches = text.match(singleCharPattern) || [];
   const spacingRatio = singleCharMatches.length / (text.length / 100);
 
   if (spacingRatio > 2) {
-    // High spacing ratio - normalize aggressively
-    // Step 1: Remove all single spaces between single letters
-    // "J a v a" -> "Java", "M i c r o s o f t" -> "Microsoft"
     normalizedText = text.replace(/([A-Za-z])\s+([A-Za-z])(?=\s+[A-Za-z]|\s*$|\s*[^A-Za-z])/g, '$1$2');
-    // Run multiple passes for deeply spaced text
     for (let i = 0; i < 5; i++) {
       const prev = normalizedText;
       normalizedText = normalizedText.replace(/([A-Za-z])\s+([A-Za-z])(?=\s+[A-Za-z]|\s*$|\s*[^A-Za-z])/g, '$1$2');
       if (prev === normalizedText) break;
     }
-    // Step 2: Clean up remaining single-space separations
     normalizedText = normalizedText.replace(/([A-Za-z])\s([A-Za-z])/g, '$1$2');
     console.log(`[ResumeParser] Normalized heavily spaced text (ratio: ${spacingRatio.toFixed(1)})`);
   }
 
   const textLower = normalizedText.toLowerCase();
+
+  // Detect skills section boundaries for context-sensitive matching
+  const skillsSectionRegex = /(?:skills|technical skills|core competencies|key skills|areas of expertise|tools?\s*(?:&|and)\s*technologies)[\s:]*\n([\s\S]*?)(?:\n\s*\n|\n(?:[A-Z][A-Za-z\s]+:?\s*\n))/gi;
+  const skillsSections = [];
+  let sectionMatch;
+  while ((sectionMatch = skillsSectionRegex.exec(text)) !== null) {
+    skillsSections.push(sectionMatch[0].toLowerCase());
+  }
+  // Also include lines that look like skill lists (comma/pipe separated, bullet lists)
+  const skillListLines = text.split('\n').filter(line => {
+    const trimmed = line.trim();
+    // Lines with multiple commas or pipes that contain known skill words
+    const separators = (trimmed.match(/[,|•]/g) || []).length;
+    return separators >= 2 && trimmed.length < 300;
+  }).join('\n').toLowerCase();
+
+  const combinedSkillsContext = skillsSections.join('\n') + '\n' + skillListLines;
+
   // Skills that need word boundary matching to avoid false positives
-  const needsWordBoundary = ["Java", "SQL", "AWS", "GCP", "Git", "CSS", "PHP", "Scala", "Rust", "Ruby", "REST", "MQ"];
+  const needsWordBoundary = ["Java", "SQL", "AWS", "GCP", "Git", "CSS", "PHP", "Scala", "Rust", "Ruby", "JMS", "SQS", "SNS", "JPA", "PCF", "TDD", "BDD", "JWT", "SSL", "TLS", "PPC", "SEM", "SEO", "CRM", "ATS", "NLP", "SAP", "D2C", "GMV", "ARR", "CAC", "IPR", "SAFe"];
 
   for (const skill of skillKeywords) {
-    // For short skills or skills that are substrings of other skills, use word boundary matching
-    if (skill.length <= 4 || needsWordBoundary.includes(skill)) {
-      const escapedSkill = skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedSkill = skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Case-sensitive skills: must match exact case
+    if (caseSensitiveSkills.includes(skill)) {
+      const regex = new RegExp(`\\b${escapedSkill}\\b`);
+      if (regex.test(text)) {
+        data.skills.push(skill);
+      }
+      continue;
+    }
+
+    // Context-sensitive skills: must appear in skills section OR appear 2+ times OR appear in a skill-list-like line
+    if (contextSensitiveSkills.includes(skill)) {
+      const skillLower = skill.toLowerCase();
+      const escapedLower = skillLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      // Check if it appears in detected skills section
+      const inSkillsSection = combinedSkillsContext.includes(skillLower);
+
+      // Check if it appears 2+ times (indicating it's a core topic, not incidental)
+      const globalRegex = new RegExp(`\\b${escapedLower}\\b`, 'gi');
+      const occurrences = (text.match(globalRegex) || []).length;
+
+      if (inSkillsSection || occurrences >= 2) {
+        data.skills.push(skill);
+      }
+      continue;
+    }
+
+    // Short skills or skills that are substrings: use word boundary matching (case-insensitive)
+    if (skill.length <= 5 || needsWordBoundary.includes(skill)) {
       const regex = new RegExp(`\\b${escapedSkill}\\b`, 'i');
       if (regex.test(text)) {
         data.skills.push(skill);
@@ -1133,13 +1364,15 @@ function extractResumeData(text) {
   for (const skill of data.skills) {
     const relatedSkills = RELATED_SKILLS_MAP[skill] || [];
     for (const relatedSkill of relatedSkills) {
-      // Only add if not already present and text contains hints of this skill
       const relatedLower = relatedSkill.toLowerCase();
-      const textLower = text.toLowerCase();
+      const resumeTextLower = text.toLowerCase();
       if (!data.skills.some(s => s.toLowerCase() === relatedLower) &&
           !relatedSkillsToAdd.some(s => s.toLowerCase() === relatedLower)) {
-        // Check if there's any hint of this skill in the text
-        if (textLower.includes(relatedLower.split(' ')[0].toLowerCase())) {
+        // Check if the FULL skill name (not just first word) appears in text
+        // This prevents false positives like "Content" matching any text with "content"
+        const escapedRelated = relatedLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const relatedRegex = new RegExp(`\\b${escapedRelated}\\b`, 'i');
+        if (relatedRegex.test(resumeTextLower)) {
           relatedSkillsToAdd.push(relatedSkill);
         }
       }
