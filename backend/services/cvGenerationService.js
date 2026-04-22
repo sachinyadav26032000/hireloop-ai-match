@@ -262,9 +262,9 @@ IMPORTANT INSTRUCTIONS:
 
   console.log("[CV Generation] Calling AI for CV creation...");
   const cvResponse = await callAI(CV_WRITER_PROMPT, userPrompt, {
-    model: "fast", // Use GPT-4o-mini (cost-effective)
-    maxTokens: 3000,
-    temperature: 0.6
+    model: "fast", // Use 8b for speed on free tier (70b too slow/unreliable)
+    maxTokens: 2000,
+    temperature: 0.5
   });
 
   // Generate fallback CV

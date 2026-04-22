@@ -552,6 +552,7 @@ function AssistantContent() {
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [resumeAutoFilled, setResumeAutoFilled] = useState(false);
   const [autoFilledFields, setAutoFilledFields] = useState<string[]>([]);
+  const [showRawResume, setShowRawResume] = useState(false);
 
   // Results state
   const [profileAnalysis, setProfileAnalysis] = useState<ProfileAnalysis | null>(null);
@@ -580,6 +581,13 @@ function AssistantContent() {
     });
     return result.valid;
   }, [fullName, email, selectedRoles, location, experienceYears]);
+
+  // Scroll to top whenever the active tab changes so the user always
+  // lands at the top of the new step instead of the bottom of the previous one.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [activeTab]);
 
   // Check if full form is valid (for AI analysis)
   const fullFormValidation = useMemo(() => {
@@ -811,6 +819,8 @@ function AssistantContent() {
       setActiveTab("analysis");
       toast.success("Profile analyzed successfully!");
     } catch (error: unknown) {
+      console.error("[Analyze] Failed:", error);
+
       if (error instanceof ApiValidationError && error.details) {
         const fieldMapping: Record<string, string> = {
           totalExperience: 'experienceYears',
@@ -838,7 +848,19 @@ function AssistantContent() {
 
         toast("Some fields had issues - analysis may be limited", { icon: "⚠️" });
       } else {
-        toast.error("Analysis failed. Please check your input and try again.");
+        // Network error (TypeError: Failed to fetch) → backend is down
+        const isNetworkError =
+          error instanceof TypeError ||
+          (error instanceof Error && /fetch|network|load failed/i.test(error.message));
+
+        if (isNetworkError) {
+          toast.error("Can't reach the server. Make sure the backend is running on port 5000.", {
+            duration: 6000,
+          });
+        } else {
+          const msg = error instanceof Error ? error.message : "Unknown error";
+          toast.error(`Analysis failed: ${msg}`);
+        }
       }
     } finally {
       setLoading(false);
@@ -967,6 +989,7 @@ function AssistantContent() {
     setUploadedFileName(file.name);
     setResumeAutoFilled(false);
     setAutoFilledFields([]);
+    setShowRawResume(false);
 
     try {
       const result = await assistantApi.uploadResume(file) as {
@@ -1195,6 +1218,49 @@ function AssistantContent() {
   // Dark theme input classes
   const inputClass = "bg-zinc-800/50 border-zinc-700 text-white placeholder:text-zinc-500 focus:border-violet-500 focus:ring-violet-500/20";
   const labelClass = "text-white";
+
+  // Extract up to 10 meaningful highlight lines from the raw resume text
+  const resumeHighlights = useMemo(() => {
+    if (!resumeText) return [];
+    const seen = new Set<string>();
+    const HEADER_WORDS = /^(EXPERIENCE|EDUCATION|SKILLS|PROJECTS|CERTIFICATIONS|ACHIEVEMENTS|SUMMARY|OBJECTIVE|PROFILE|CONTACT|LANGUAGES|INTERESTS|AWARDS|PUBLICATIONS|REFERENCES|WORK HISTORY|PROFESSIONAL EXPERIENCE|TECHNICAL SKILLS|CORE COMPETENCIES)[\s:]*$/i;
+
+    const lines = resumeText
+      .split(/\r?\n/)
+      .map((l) => l.replace(/^[\s•●▪◦·\-–—*→]+/, "").trim())
+      .filter((l) => {
+        if (l.length < 20 || l.length > 300) return false;
+        if (HEADER_WORDS.test(l)) return false;
+        // Skip lines that are mostly contact info (email, phone, URL on its own)
+        if (/^\S+@\S+\.\S+$/.test(l)) return false;
+        if (/^[\d+()\s-]{7,}$/.test(l)) return false;
+        if (/^(https?:|www\.|linkedin\.com)/i.test(l)) return false;
+        // Skip lines that are ALL CAPS very short (likely section headers)
+        if (l === l.toUpperCase() && l.length < 40 && !/\d/.test(l)) return false;
+        const key = l.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+    // Prefer lines with strong signal: metrics, action verbs, role words, years
+    const ACTION = /\b(led|built|managed|designed|developed|launched|scaled|grew|drove|delivered|implemented|optimized|increased|reduced|created|founded|architected|directed|improved|pioneered|established|transformed|headed|spearheaded)\b/i;
+    const ROLE = /\b(manager|engineer|director|lead|founder|ceo|cto|cfo|vp|president|analyst|consultant|architect|specialist|scientist|designer|developer|officer|head|principal)\b/i;
+    const METRIC = /(\d+%|\d+[kKmMbB]\b|\$\d|\d+\+|\d+ ?(years?|months?|million|billion|clients?|users?|projects?|teams?))/;
+
+    const scored = lines.map((line) => {
+      let score = 0;
+      if (ACTION.test(line)) score += 3;
+      if (METRIC.test(line)) score += 3;
+      if (ROLE.test(line)) score += 2;
+      if (/\b(19|20)\d{2}\b/.test(line)) score += 1; // has a year
+      if (line.length > 60 && line.length < 160) score += 1; // ideal length
+      return { line, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, 10).map((s) => s.line);
+  }, [resumeText]);
 
   // Show AI thinking state when loading
   if (loading && aiThinkingMessage) {
@@ -1680,53 +1746,123 @@ function AssistantContent() {
                 <div className="space-y-4">
                   <SectionHeader
                     icon={FileText}
-                    title="Resume Content"
-                    description={resumeAutoFilled ? "Extracted from your uploaded resume" : "Paste your resume content for AI analysis"}
+                    title="Resume Highlights"
+                    description={resumeAutoFilled ? "Key points extracted from your resume" : "Paste your resume content for AI analysis"}
                     required
                   />
                   <div className="pl-11 space-y-4">
-                    {/* Resume Text Area */}
-                    <div className="space-y-2">
-                      <Label htmlFor="resume" className="text-sm text-white flex items-center gap-2">
-                        Resume Text *
-                        {autoFilledFields.includes("Resume Content") && resumeText && (
-                          <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
-                            Auto-extracted
-                          </Badge>
-                        )}
-                      </Label>
-                      <Textarea
-                        id="resume"
-                        autoComplete="off"
-                        placeholder={resumeAutoFilled ? "Resume content extracted from your file" : "Paste your complete resume content here. Include your work experience, education, skills, projects, and achievements..."}
-                        value={resumeText}
-                        onChange={(e) => {
-                          setResumeText(e.target.value);
-                          if (touched.resumeText && e.target.value.length > 20) {
-                            validateField('resumeText', e.target.value);
-                          }
-                        }}
-                        onBlur={() => {
-                          handleBlur('resumeText');
-                          validateField('resumeText', resumeText);
-                        }}
-                        className={cn(
-                          inputClass,
-                          "transition-all duration-200",
-                          resumeAutoFilled ? "min-h-[100px]" : "min-h-[180px]",
-                          errors.resumeText && touched.resumeText ? 'border-red-500 focus:ring-red-500/20' : '',
-                          autoFilledFields.includes("Resume Content") && resumeText ? 'border-emerald-500/30' : ''
-                        )}
-                      />
-                      <FieldError error={touched.resumeText ? errors.resumeText : undefined} />
-                      <FieldWarning warning={warnings.resumeText} />
-                    </div>
+                    {/* Highlights Card - shown when auto-filled with content */}
+                    {resumeAutoFilled && resumeHighlights.length > 0 && !showRawResume && (
+                      <div className="relative rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-500/5 via-zinc-900/40 to-purple-500/5 p-4 sm:p-5 shadow-lg shadow-violet-500/5">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/30 flex-shrink-0">
+                              <Sparkles className="h-3.5 w-3.5 text-violet-300" />
+                            </div>
+                            <span className="text-sm font-semibold text-white">
+                              Top {resumeHighlights.length} {resumeHighlights.length === 1 ? "Highlight" : "Highlights"}
+                            </span>
+                            <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                              Auto-extracted
+                            </Badge>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowRawResume(true)}
+                            className="h-8 text-xs text-violet-300 hover:text-white hover:bg-violet-500/10"
+                          >
+                            <FileEdit className="h-3.5 w-3.5 mr-1.5" />
+                            Edit raw text
+                          </Button>
+                        </div>
 
-                    <p className="text-xs text-zinc-300">
-                      {resumeAutoFilled
-                        ? "This content was extracted from your resume. You can edit it if needed."
-                        : "AI extracts skills and generates your CV from this content. The more detailed your resume, the better the analysis."}
-                    </p>
+                        <ul className="space-y-2.5">
+                          {resumeHighlights.map((highlight, idx) => (
+                            <li
+                              key={idx}
+                              className="group flex items-start gap-3 rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-3 transition-all duration-200 hover:border-violet-500/30 hover:bg-zinc-900/70"
+                            >
+                              <div
+                                aria-hidden="true"
+                                className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/30 text-[11px] font-bold text-violet-200"
+                              >
+                                {idx + 1}
+                              </div>
+                              <p className="text-sm leading-relaxed text-zinc-200 group-hover:text-white break-words">
+                                {highlight.length > 220 ? `${highlight.slice(0, 217)}…` : highlight}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+
+                        <div className="mt-4 flex items-start gap-2 rounded-lg bg-zinc-900/40 border border-zinc-800 px-3 py-2">
+                          <Lightbulb className="h-3.5 w-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                          <p className="text-xs text-zinc-400">
+                            Your full resume is preserved and used for CV generation — these are just the most important lines.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Raw Text Editor - shown when not auto-filled OR when user wants to edit */}
+                    {(!resumeAutoFilled || showRawResume || resumeHighlights.length === 0) && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="resume" className="text-sm text-white flex items-center gap-2">
+                            Resume Text *
+                            {autoFilledFields.includes("Resume Content") && resumeText && (
+                              <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                                Auto-extracted
+                              </Badge>
+                            )}
+                          </Label>
+                          {resumeAutoFilled && resumeHighlights.length > 0 && showRawResume && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setShowRawResume(false)}
+                              className="h-8 text-xs text-violet-300 hover:text-white hover:bg-violet-500/10"
+                            >
+                              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                              View highlights
+                            </Button>
+                          )}
+                        </div>
+                        <Textarea
+                          id="resume"
+                          autoComplete="off"
+                          placeholder={resumeAutoFilled ? "Resume content extracted from your file" : "Paste your complete resume content here. Include your work experience, education, skills, projects, and achievements..."}
+                          value={resumeText}
+                          onChange={(e) => {
+                            setResumeText(e.target.value);
+                            if (touched.resumeText && e.target.value.length > 20) {
+                              validateField('resumeText', e.target.value);
+                            }
+                          }}
+                          onBlur={() => {
+                            handleBlur('resumeText');
+                            validateField('resumeText', resumeText);
+                          }}
+                          className={cn(
+                            inputClass,
+                            "transition-all duration-200",
+                            resumeAutoFilled ? "min-h-[160px]" : "min-h-[180px]",
+                            errors.resumeText && touched.resumeText ? 'border-red-500 focus:ring-red-500/20' : '',
+                            autoFilledFields.includes("Resume Content") && resumeText ? 'border-emerald-500/30' : ''
+                          )}
+                        />
+                        <FieldError error={touched.resumeText ? errors.resumeText : undefined} />
+                        <FieldWarning warning={warnings.resumeText} />
+                        <p className="text-xs text-zinc-400">
+                          {resumeAutoFilled
+                            ? "Edits here are saved automatically and used for CV & LinkedIn generation."
+                            : "AI extracts skills and generates your CV from this content. The more detailed your resume, the better the analysis."}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 

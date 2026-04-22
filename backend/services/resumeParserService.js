@@ -301,8 +301,8 @@ function cleanPDFText(text) {
   // Lines that are just a single character
   cleaned = cleaned.replace(/^\s*[a-zA-Z]\s*$/gm, '');
 
-  // Step 14: Fix broken "tion/sion" words from PDF line-break splits
-  // "retenti on" -> "retention", "Communicati on" -> "Communication", "collaborati on" -> "collaboration"
+  // Step 14: Fix broken words from PDF character spacing issues
+  // "retenti on" -> "retention", "Communicati on" -> "Communication"
   cleaned = cleaned.replace(/([a-zA-Z]{2,}ti)\s+(on|ons|onal|onally|oning)\b/g, '$1$2');
   cleaned = cleaned.replace(/([a-zA-Z]{2,}si)\s+(on|ons|onal|onally|oning|ve|vely)\b/g, '$1$2');
   cleaned = cleaned.replace(/([a-zA-Z]{2,}ci)\s+(al|ally|ous|ously|es|ent|ently|ency|encies)\b/g, '$1$2');
@@ -311,6 +311,26 @@ function cleanPDFText(text) {
   cleaned = cleaned.replace(/\b([Hh]ardw)\s+(are)\b/g, '$1$2');
   // "Childc are" -> "Childcare", "healthc are" -> "healthcare"
   cleaned = cleaned.replace(/([a-zA-Z]{3,})c\s+are\b/g, '$1care');
+
+  // Step 14b: Fix broken words where a short suffix (2-3 chars) was split by PDF spacing
+  // "Sudharsh an" -> "Sudharshan", "asp an" -> "aspan", "withinas pan" stays
+  // Approach: if fragment1 is NOT a common English word (likely a broken piece), merge with fragment2
+  // Common suffixes in broken words: an, ar, am, al, ah, er, or, ed, es, ly, ey, sh, th, ur, us, um, el, il, in, en, on
+  cleaned = cleaned.replace(/\b([A-Z][a-z]{2,}[bcdfghjklmnpqrstvwxyz])\s+(an|ar|am|al|ah|er|or|ur|us|um|el|il|sh|th|ey|in|en|on)\b/g, (match, p1, p2) => {
+    // Only merge for capitalized words (likely names) where p1 is not a common word
+    const commonWords = new Set(['each','much','such','rich','tech','fresh','both','with','from','just','been','when','then','than','them','this','that','push','pull','rush','cash','fish','dish','wash','wish','bush','turn','burn','plus','thus','upon','down','back','over','ever','even','open','next','last','best','most','must','long','each','well','just','call','tell','fell','sell','will','till','fill','kill','bill','mill','hill','still','small','shall','until','month','month','worth','south','north','church','watch','match','catch','reach','teach','search','much','such','touch','lunch','punch','bunch']);
+    if (commonWords.has(p1.toLowerCase())) return match;
+    return p1 + p2;
+  });
+  // Also handle lowercase broken words: "withinasp an" -> not caught above, but "sp an" pattern
+  // Handle "asp an" -> "aspan" only when preceded by non-word boundary text
+  cleaned = cleaned.replace(/\b([a-z]{3,}[bcdfghjklmnpqrstvwxyz])\s+(an|ar|am|al|ah)\b/g, (match, p1, p2) => {
+    // Very conservative: only merge if p1 ends in consonant cluster AND p1 is clearly a word fragment
+    // Check if p1 is NOT a recognizable English word (crude check: common 3-8 letter words)
+    const commonWords = new Set(['the','and','for','are','but','not','you','all','can','had','her','was','one','our','out','has','his','how','its','may','new','now','old','see','way','who','any','few','get','got','let','say','she','too','use','did','top','yes','yet','add','ago','big','end','far','own','put','run','set','try','ask','cut','hot','sit','low','red','also','back','been','best','both','came','come','dark','dear','deep','done','door','down','each','east','easy','else','even','ever','face','fact','fall','feel','fill','find','fine','fire','five','flat','food','foot','four','free','from','full','gave','give','goes','gold','good','gray','grew','grow','hair','half','hall','hand','hang','hard','have','head','hear','help','here','high','hill','hold','home','hope','hour','huge','hung','hurt','inch','into','iron','item','just','keen','keep','kept','kill','kind','king','knew','know','lack','laid','land','last','late','lead','lean','left','lend','less','lift','like','line','list','live','long','look','lord','lose','loss','lost','loud','love','luck','made','main','make','male','many','mark','mass','meet','melt','mile','mind','mine','miss','mode','mood','moon','more','most','move','much','must','name','near','neck','need','nest','next','nice','nine','none','nose','note','once','only','onto','open','over','pack','page','paid','pair','part','pass','past','path','pick','plan','play','plot','plus','poor','port','post','pour','pull','pump','pure','push','quit','race','rain','rang','rank','rare','rate','read','real','rent','rest','rich','ride','ring','rise','risk','road','rock','rode','role','roll','room','root','rope','rose','rule','rush','safe','said','sail','sale','salt','same','sand','sang','save','seat','seed','seek','seem','seen','self','sell','send','sent','ship','shoe','shop','shot','show','shut','sick','side','sign','silk','sing','sink','site','size','skin','slip','slow','snow','soft','soil','sold','sole','some','song','soon','sort','soul','spot','star','stay','stem','step','stop','such','suit','sure','swim','tail','take','tale','talk','tall','tank','tape','task','team','tell','tend','term','test','text','than','that','them','then','they','thin','this','thus','tiny','told','tone','took','tool','torn','tour','town','trap','tree','trim','trip','true','tube','tune','turn','twin','type','unit','upon','urge','used','user','vary','vast','verb','very','view','vote','wage','wait','wake','walk','wall','want','warm','warn','wash','wave','weak','wear','week','well','went','were','west','what','when','whom','wide','wife','wild','will','wind','wine','wing','wire','wise','wish','with','wood','word','wore','work','worm','worn','wrap','yard','year','your','zero','zone','about','above','after','again','along','being','below','bring','build','built','carry','catch','cause','check','child','class','clear','close','could','cover','cross','death','doubt','drawn','dream','dress','drink','drive','early','eight','empty','enemy','enjoy','enter','equal','event','every','exact','exist','extra','faith','false','favor','field','fight','final','first','fixed','floor','focus','force','found','front','fruit','given','glass','going','grace','grand','grant','grass','great','green','group','grown','guard','guess','guide','happy','heart','heavy','hence','horse','hotel','house','human','ideal','image','index','inner','input','issue','joint','judge','known','labor','large','later','laugh','layer','learn','least','leave','legal','level','light','limit','local','loose','lover','lower','lucky','lunch','magic','major','match','maybe','mayor','media','metal','might','minor','model','money','month','moral','motor','mount','mouth','music','named','nerve','never','night','noise','north','noted','novel','nurse','occur','ocean','offer','often','order','other','ought','outer','owner','paint','panel','paper','party','patch','peace','phase','phone','photo','piano','piece','pilot','pitch','place','plain','plant','plate','plaza','point','pound','power','press','price','pride','prime','print','prior','proof','proud','prove','queen','quiet','quite','quote','radio','raise','range','rapid','ratio','reach','ready','realm','reign','relax','reply','right','river','rough','round','route','royal','rural','saint','scale','scene','scope','score','sense','serve','seven','shall','shape','share','sharp','shelf','shell','shift','shine','shirt','shock','shoot','short','shout','sight','since','sixth','sixty','sleep','slide','slope','small','smart','smell','smile','smoke','solid','solve','sorry','sound','south','space','spare','speak','speed','spend','spent','split','sport','spray','spread','squad','stack','staff','stage','stair','stake','stand','start','state','steam','steel','steep','steer','stick','still','stock','stone','stood','store','storm','story','stove','strip','stuck','study','stuff','style','sugar','super','surge','swear','sweep','sweet','swing','sword','taken','taste','teach','teeth','thank','theme','there','thick','thing','think','third','those','three','threw','throw','tight','tired','title','today','token','total','touch','tough','tower','trace','track','trade','trail','train','trait','treat','trend','trial','tribe','trick','tried','troop','truck','truly','trust','truth','twice','twist','ultra','uncle','under','union','unite','unity','until','upper','upset','urban','usual','valid','value','video','virus','visit','vital','voice','waste','watch','water','wheel','where','which','while','white','whole','whose','woman','women','world','worry','worse','worst','worth','would','wound','write','wrong','wrote','yield','young','youth']);
+    if (commonWords.has(p1)) return match;
+    return p1 + p2;
+  });
 
   // Step 15: Fix common stuck words (missing space between words)
   // Safe exact-match replacements only - won't break real words
@@ -591,6 +611,69 @@ function namesAreRelated(name1, name2) {
  * Parse resume file and extract text content
  * FAIL-SAFE: Always returns success, gracefully degrades on errors
  */
+/**
+ * AI-powered resume data extraction - single call replaces all regex parsing
+ * Extracts: name, email, phone, linkedin, skills, experience, education, roles, suggestions
+ */
+const AI_RESUME_EXTRACTOR_PROMPT = `You are an expert resume parser AND career advisor. Extract ALL data from this resume AND suggest the best career roles.
+
+Fix PDF artifacts (broken words like "Sudharsh an"→"Sudharshan", split emails like "name@\\ngmail.com"→"name@gmail.com").
+
+RULES:
+- "name" = person's ACTUAL NAME only, never a job title
+- "experience" = EVERY job listed with title, company, date range
+- "experienceYears" = calculate from earliest job start to present
+- "primaryDomain" = their main career field
+- "skills" = ALL skills mentioned (technical + soft skills)
+- "education" = ALL degrees/certifications
+- "suggestedRoles" = IMPORTANT: Suggest 5-8 BEST job titles this person should apply for RIGHT NOW based on their experience, skills, and career trajectory. Think like a career coach - include realistic next-step roles, lateral moves, and one stretch role. Use real job titles that exist on LinkedIn/Naukri (e.g. "Head of Customer Experience", "VP Operations", "Director - Client Success"). Do NOT just copy their past job titles.
+- "suggestedSkills" = 5-6 in-demand skills they should learn to be more competitive
+
+Return ONLY valid JSON:
+{"name":"Full Name","email":"x@y.com","phone":"+91-xxx","linkedin":"url or null","skills":["s1","s2"],"experience":[{"title":"Title","company":"Company","duration":"Mon YYYY - Mon YYYY"}],"education":[{"degree":"Degree","institution":"School","year":"YYYY"}],"suggestedRoles":["Best role 1","Best role 2","Best role 3","Best role 4","Best role 5"],"experienceYears":15,"primaryDomain":"field","suggestedSkills":["in-demand skill 1","in-demand skill 2","in-demand skill 3","in-demand skill 4","in-demand skill 5"],"profileSummary":"One professional summary line"}`;
+
+async function aiExtractResumeData(text) {
+  try {
+    const truncated = text.slice(0, 6000); // Full resume text
+    const response = await callAI(AI_RESUME_EXTRACTOR_PROMPT, truncated, {
+      model: "fast",
+      maxTokens: 1800, // Full extraction: contact + all experience + education + skills
+      temperature: 0.2,
+    });
+
+    if (!response) return null;
+
+    const parsed = parseAIResponse(response, null);
+    if (!parsed) return null;
+
+    // Validate: must have at least name or email
+    if (!parsed.name && !parsed.email && (!parsed.skills || parsed.skills.length === 0)) {
+      return null;
+    }
+
+    // Validate name against actual resume text - catch AI hallucinations
+    if (parsed.name) {
+      const nameWords = parsed.name.split(/\s+/);
+      const textLower = truncated.toLowerCase();
+      // Each word in the name must appear somewhere in the resume text
+      const validWords = nameWords.filter(w => w.length > 1 && textLower.includes(w.toLowerCase()));
+      if (validWords.length < nameWords.length) {
+        // Some name words are hallucinated - only keep words found in text
+        const cleanedName = validWords.join(" ");
+        if (cleanedName.length >= 3) {
+          console.log(`[ResumeParser] Name corrected: "${parsed.name}" → "${cleanedName}" (removed hallucinated words)`);
+          parsed.name = cleanedName;
+        }
+      }
+    }
+
+    return parsed;
+  } catch (error) {
+    console.error("[ResumeParser] AI extraction error:", error.message);
+    return null;
+  }
+}
+
 export async function parseResumeFile(fileBuffer, mimeType, filename) {
   const extension = filename?.split(".").pop()?.toLowerCase();
 
@@ -652,16 +735,6 @@ export async function parseResumeFile(fileBuffer, mimeType, filename) {
     // If cleanPDFText fails, continue with cleanResumeText output
   }
 
-  // Extract structured data (with fallback)
-  let extractedData = emptyExtractedData;
-  try {
-    if (text && text.length > 0) {
-      extractedData = extractResumeData(text);
-    }
-  } catch {
-    extractedData = emptyExtractedData;
-  }
-
   // Calculate word count
   const wordCount = text ? text.split(/\s+/).filter(w => w.length > 0).length : 0;
 
@@ -669,11 +742,59 @@ export async function parseResumeFile(fileBuffer, mimeType, filename) {
   const isPDF = mimeType === "application/pdf" || extension === "pdf";
   const isImageBasedPDF = isPDF && wordCount < 30;
 
+  // Extract structured data: AI-first, regex fallback
+  let extractedData = emptyExtractedData;
+  let aiSuggestions = null;
+
+  if (text && text.length > 50) {
+    // Try AI-powered extraction first (single call does everything)
+    if (isAIAvailable() && wordCount >= 30) {
+      try {
+        console.log("[ResumeParser] Using AI-powered extraction...");
+        const aiResult = await aiExtractResumeData(text);
+        if (aiResult && (aiResult.name || aiResult.email || aiResult.skills?.length > 0)) {
+          extractedData = {
+            name: aiResult.name || null,
+            email: aiResult.email?.toLowerCase() || null,
+            phone: aiResult.phone || null,
+            linkedin: aiResult.linkedin || null,
+            skills: aiResult.skills || [],
+            experience: aiResult.experience || [],
+            education: aiResult.education || [],
+            suggestedRoles: aiResult.suggestedRoles || [],
+            rawSkillTokens: aiResult.rawSkillTokens || aiResult.skills || [],
+          };
+          aiSuggestions = {
+            suggestedSkills: aiResult.suggestedSkills || [],
+            profileSummary: Array.isArray(aiResult.profileSummary) ? aiResult.profileSummary : (aiResult.profileSummary ? [aiResult.profileSummary] : []),
+            experienceYears: aiResult.experienceYears || null,
+            primaryDomain: aiResult.primaryDomain || null,
+          };
+          console.log(`[ResumeParser] AI extraction success: name="${extractedData.name}", email="${extractedData.email}", skills=${extractedData.skills.length}`);
+        } else {
+          console.log("[ResumeParser] AI extraction returned incomplete data, falling back to regex");
+        }
+      } catch (aiErr) {
+        console.log("[ResumeParser] AI extraction failed, falling back to regex:", aiErr.message);
+      }
+    }
+
+    // Fallback to regex-based extraction if AI didn't work
+    if (!extractedData.name && !extractedData.email && extractedData.skills.length === 0) {
+      try {
+        extractedData = extractResumeData(text);
+      } catch {
+        extractedData = emptyExtractedData;
+      }
+    }
+  }
+
   // ALWAYS return success (graceful degradation)
   return {
     success: true,
     text: text || "",
     extractedData: extractedData || emptyExtractedData,
+    aiSuggestions: aiSuggestions,
     wordCount: wordCount,
     isImageBasedPDF: isImageBasedPDF,
     message: isImageBasedPDF
@@ -949,8 +1070,44 @@ function extractResumeData(text) {
   };
 
   // Extract email - handle spaced emails like "a nkitdutt87@gmail.com" or "DEWAS.AGARWAL 3 @GMAIL.COM"
+  // Pre-process: Join lines where email is split across lines
+  // Case 1: "user@\ngmail.com" (@ at end of line)
+  // Case 2: "user@ Some other text\ngmail.com More text" (@ mid-line, domain on next line)
+  const rawEmailLines = text.split('\n');
+  const emailLines = [];
+  for (let li = 0; li < rawEmailLines.length; li++) {
+    const line = rawEmailLines[li].trim();
+
+    if (li < rawEmailLines.length - 1 && line.includes('@')) {
+      const atIdx = line.indexOf('@');
+      const afterAt = line.substring(atIdx + 1).trim();
+      // Check if there's no valid domain after @ (no dot+TLD pattern)
+      const hasDomain = /[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(afterAt);
+
+      if (!hasDomain) {
+        const nextLine = rawEmailLines[li + 1].trim();
+        // Check if next line starts with what looks like a domain (e.g., "gmail.com")
+        const domainMatch = nextLine.match(/^([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+        if (domainMatch) {
+          // Extract local part: everything before @ that looks like an email local part
+          const beforeAt = line.substring(0, atIdx);
+          const localTokens = beforeAt.split(/\s+/);
+          const localPart = localTokens[localTokens.length - 1]; // last word before @
+          const reconstructed = localPart + '@' + domainMatch[1];
+          // Insert a synthetic line with just the email
+          emailLines.push(reconstructed);
+          console.log(`[ResumeParser] Merged split email across lines: "${reconstructed}"`);
+          // Still add both original lines for other processing
+          emailLines.push(line);
+          li++;
+          emailLines.push(rawEmailLines[li].trim());
+          continue;
+        }
+      }
+    }
+    emailLines.push(line);
+  }
   // Strategy: First try line-by-line extraction to handle PDF spacing artifacts
-  const emailLines = text.split('\n');
   for (const line of emailLines) {
     if (line.includes('@')) {
       const trimmedLine = line.trim();
@@ -1418,9 +1575,10 @@ function extractResumeData(text) {
 
     // Validate extracted name: reject if any word is too long (likely stuck-together from spacing issues)
     // e.g., "MR. AMOLGATHADI" has "AMOLGATHADI" (11 chars) which is not a real name word
+    // Threshold: 15 chars (Indian/South Asian names can be long: Krishnamurthy=13, Venkataraman=12)
     if (data.name) {
       const nameWords = data.name.replace(/^(MR\.?|MS\.?|MRS\.?|DR\.?|PROF\.?)\s+/i, '').split(/\s+/);
-      const hasStuckWord = nameWords.some(w => w.replace(/[.]/g, '').length > 10);
+      const hasStuckWord = nameWords.some(w => w.replace(/[.]/g, '').length > 15);
       if (hasStuckWord) {
         console.log(`[ResumeParser] Name "${data.name}" rejected - likely stuck-together text, falling back to email`);
         data.name = null;

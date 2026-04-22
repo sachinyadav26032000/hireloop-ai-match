@@ -33,7 +33,9 @@ IMPORTANT RULES:
 - Be specific to THIS candidate, not generic advice
 - Consider the current job market and industry trends
 
-Return your analysis as valid JSON with this structure:
+IMPORTANT: Return ONLY a valid JSON object. No text before or after the JSON. No markdown code blocks. Just the raw JSON object.
+
+JSON structure:
 {
   "suggestedRoles": ["Most suitable role", "Alternative 1", "Alternative 2"],
   "experienceLevel": "entry|junior|mid|senior|lead|executive",
@@ -42,9 +44,9 @@ Return your analysis as valid JSON with this structure:
   "softSkills": ["Soft skills evidenced by their experience"],
   "industryFit": ["Industries they'd excel in"],
   "careerTrajectory": "Brief assessment of their career path and potential",
-  "uniqueStrengths": ["What makes this candidate stand out"],
-  "weakAreas": ["Specific gaps to address - be constructive"],
-  "marketGaps": ["Skills/experiences that would make them more competitive"],
+  "uniqueStrengths": ["What makes this candidate stand out - be specific to THEIR profile"],
+  "weakAreas": ["EXACTLY 5 specific, realistic areas to improve - based on THIS person's resume gaps, missing skills, weak sections, or career blind spots. Be constructive but honest. Example: 'No data/analytics skills despite leadership roles - adding SQL or Tableau would strengthen VP-level candidacy'"],
+  "marketGaps": ["EXACTLY 5 realistic market opportunities for THIS person - based on current hiring trends, industry demand, and their transferable skills. Example: 'Customer Experience leaders with AI/chatbot implementation experience are in high demand at Series B+ startups'"],
   "immediateActions": ["Top 3 things they should do right now"],
   "summary": "Compelling 2-3 sentence professional summary for this candidate",
   "confidenceScore": 0-100 based on how much information you had to work with
@@ -1025,23 +1027,9 @@ Preferred Locations: ${locations?.join(", ") || "Flexible"}
 
 Please provide a thorough career analysis for this candidate. Be specific to THEIR situation - avoid generic advice. If limited information is provided, acknowledge this and do the best analysis possible with available data.`;
 
-  // Call AI for career analysis
-  console.log("[Profile Analysis] Calling AI for comprehensive analysis...");
-  const analysisResponse = await callAI(CAREER_ANALYST_PROMPT, userPrompt, {
-    model: "fast", // Use GPT-4o-mini (cost-effective, avoids quota issues)
-    maxTokens: 2500,
-    temperature: 0.7
-  });
+  // Run career analysis + ATS analysis in PARALLEL for speed
+  console.log("[Profile Analysis] Calling AI for career analysis + ATS in parallel...");
 
-  // Parse AI response with fallback
-  const fallbackAnalysis = extractBasicInfo(input);
-  let analysis = parseAIResponse(analysisResponse, fallbackAnalysis);
-
-  // Mark as AI-powered
-  analysis.aiPowered = analysisResponse !== null;
-
-  // Now get ATS score analysis
-  console.log("[Profile Analysis] Analyzing ATS compatibility...");
   const atsPrompt = `
 Analyze this profile for ATS (Applicant Tracking System) optimization:
 
@@ -1050,16 +1038,28 @@ Target Role: ${normalizedRole || "General"}
 Resume/Profile Content:
 ${resumeText || selfDescription || "Limited content provided"}
 
-Skills: ${selectedSkills?.join(", ") || analysis.coreSkills?.join(", ") || "Not specified"}
-Experience: ${totalExperience || analysis.yearsOfExperience || 0} years
+Skills: ${selectedSkills?.join(", ") || "Not specified"}
+Experience: ${totalExperience || 0} years
 
 Provide specific ATS scoring and actionable improvements.`;
 
-  const atsResponse = await callAI(ATS_ANALYST_PROMPT, atsPrompt, {
-    model: "fast", // GPT-4o-mini is sufficient for ATS analysis
-    maxTokens: 1500,
-    temperature: 0.3 // Lower temperature for more consistent scoring
-  });
+  const [analysisResponse, atsResponse] = await Promise.all([
+    callAI(CAREER_ANALYST_PROMPT, userPrompt, {
+      model: "fast",
+      maxTokens: 2000,
+      temperature: 0.4
+    }),
+    callAI(ATS_ANALYST_PROMPT, atsPrompt, {
+      model: "fast",
+      maxTokens: 1500,
+      temperature: 0.3
+    })
+  ]);
+
+  // Parse AI responses with fallbacks
+  const fallbackAnalysis = extractBasicInfo(input);
+  let analysis = parseAIResponse(analysisResponse, fallbackAnalysis);
+  analysis.aiPowered = analysisResponse !== null;
 
   const atsAnalysis = parseAIResponse(atsResponse, {
     overall: 55,
@@ -1070,8 +1070,11 @@ Provide specific ATS scoring and actionable improvements.`;
     topImprovements: analysis.weakAreas || []
   });
 
-  // Combine analyses
-  return {
+  // Combine analyses - AI weakAreas/marketGaps take priority (real insights)
+  const aiWeakAreas = analysis.weakAreas;
+  const aiMarketGaps = analysis.marketGaps;
+
+  const result = {
     ...analysis,
     atsScoreBreakdown: {
       overall: atsAnalysis.overall || 55,
@@ -1101,11 +1104,13 @@ Provide specific ATS scoring and actionable improvements.`;
           improvements: atsAnalysis.formattingClarity?.issues || []
         }
       },
-      topImprovements: atsAnalysis.topImprovements || analysis.weakAreas || []
+      topImprovements: atsAnalysis.topImprovements || aiWeakAreas || []
     },
-    // Ensure weakAreas uses ATS improvements if available
-    weakAreas: atsAnalysis.topImprovements?.length > 0
-      ? atsAnalysis.topImprovements
-      : analysis.weakAreas
+    // Use AI-generated weakAreas and marketGaps (real insights, not hardcoded)
+    weakAreas: (aiWeakAreas?.length >= 3) ? aiWeakAreas : (atsAnalysis.topImprovements || aiWeakAreas || []),
+    marketGaps: (aiMarketGaps?.length >= 3) ? aiMarketGaps : (aiMarketGaps || [])
   };
+
+  console.log(`[Profile Analysis] weakAreas: ${result.weakAreas?.length} items, marketGaps: ${result.marketGaps?.length} items`);
+  return result;
 }

@@ -147,21 +147,19 @@ router.post("/upload-resume", upload.single("resume"), async (req, res) => {
       sessionHandleResumeUpload(sessionId, req.file.originalname);
     }
 
-    // Generate AI-powered suggestions (async, don't block)
-    let aiSuggestions = null;
-    try {
-      console.log("[Assistant] Generating suggestions for text length:", result.text?.length);
-      aiSuggestions = await generateResumeSuggestions(result.text);
-      console.log("[Assistant] AI suggestions result:", aiSuggestions ? "received" : "null");
-      if (!aiSuggestions) {
-        // Fallback to basic suggestions
-        console.log("[Assistant] Using basic suggestions fallback");
+    // Get AI suggestions - either from AI extraction (already done) or fallback
+    let aiSuggestions = result.aiSuggestions || null;
+    if (!aiSuggestions) {
+      try {
+        // Try separate AI suggestions call
+        aiSuggestions = await generateResumeSuggestions(result.text);
+        if (!aiSuggestions) {
+          aiSuggestions = generateBasicSuggestions(result.extractedData, result.text);
+        }
+      } catch (suggestionError) {
+        console.log("[Assistant] Suggestion generation issue:", suggestionError.message);
         aiSuggestions = generateBasicSuggestions(result.extractedData, result.text);
-        console.log("[Assistant] Basic suggestions:", JSON.stringify(aiSuggestions));
       }
-    } catch (suggestionError) {
-      console.log("[Assistant] Suggestion generation issue:", suggestionError.message);
-      aiSuggestions = generateBasicSuggestions(result.extractedData, result.text);
     }
 
     // Determine appropriate message

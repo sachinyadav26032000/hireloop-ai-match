@@ -588,9 +588,9 @@ Be specific to THIS candidate - avoid generic advice.`;
 
   console.log("[LinkedIn Optimization] Calling AI for comprehensive optimization...");
   const optimizationResponse = await callAI(LINKEDIN_OPTIMIZER_PROMPT, userPrompt, {
-    model: "fast", // Use GPT-4o-mini (cost-effective)
-    maxTokens: 3000,
-    temperature: 0.7
+    model: "fast", // Use 8b for speed on free tier (70b too slow/unreliable)
+    maxTokens: 2000,
+    temperature: 0.5
   });
 
   // Parse response with fallback
